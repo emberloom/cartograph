@@ -92,7 +92,7 @@ pub fn index_repo(repo_path: &Path, store: &mut GraphStore) -> Result<()> {
 
 /// Recursively collect all `.rs` files under `dir`, skipping `target/`.
 fn collect_rs_files(
-    root: &Path,
+    _root: &Path,
     dir: &Path,
     out: &mut Vec<std::path::PathBuf>,
 ) -> Result<()> {
@@ -104,7 +104,7 @@ fn collect_rs_files(
             if path.file_name().map(|n| n == "target").unwrap_or(false) {
                 continue;
             }
-            collect_rs_files(root, &path, out)?;
+            collect_rs_files(_root, &path, out)?;
         } else if path.extension().map(|e| e == "rs").unwrap_or(false) {
             out.push(path);
         }

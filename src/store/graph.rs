@@ -70,10 +70,9 @@ impl GraphStore {
         for (from_id, to_id, kind_str) in edge_rows {
             if let (Some(&from_node), Some(&to_node)) =
                 (self.node_map.get(&from_id), self.node_map.get(&to_id))
+                && let Ok(kind) = kind_str.parse::<EdgeKind>()
             {
-                if let Ok(kind) = kind_str.parse::<EdgeKind>() {
-                    self.graph.add_edge(from_node, to_node, kind);
-                }
+                self.graph.add_edge(from_node, to_node, kind);
             }
         }
 
@@ -199,9 +198,9 @@ impl GraphStore {
                 .edges_directed(current, petgraph::Direction::Outgoing)
             {
                 let neighbor = edge_ref.target();
-                if !visited.contains_key(&neighbor) {
+                if let std::collections::hash_map::Entry::Vacant(e) = visited.entry(neighbor) {
                     let new_depth = depth + 1;
-                    visited.insert(neighbor, new_depth);
+                    e.insert(new_depth);
                     let neighbor_id = self.graph[neighbor].clone();
                     if let Some(entity) = self.entities.get(&neighbor_id) {
                         result.push(entity.clone());
@@ -241,9 +240,9 @@ impl GraphStore {
             .graph
             .edges_directed(node, petgraph::Direction::Outgoing)
             .filter(|e| e.weight() == kind)
-            .filter_map(|e| {
+            .map(|e| {
                 let neighbor_id = self.graph[e.target()].clone();
-                Some((neighbor_id, e.weight().clone()))
+                (neighbor_id, e.weight().clone())
             })
             .collect();
 
@@ -307,9 +306,9 @@ impl GraphStore {
                 .edges_directed(current, petgraph::Direction::Outgoing)
             {
                 let neighbor = edge_ref.target();
-                if !visited.contains_key(&neighbor) {
+                if let std::collections::hash_map::Entry::Vacant(e) = visited.entry(neighbor) {
                     let new_depth = depth + 1;
-                    visited.insert(neighbor, new_depth);
+                    e.insert(new_depth);
                     let neighbor_id = self.graph[neighbor].clone();
                     if let Some(entity) = self.entities.get(&neighbor_id) {
                         result.push((entity.clone(), new_depth, edge_ref.weight().clone()));

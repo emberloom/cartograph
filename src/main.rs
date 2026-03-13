@@ -68,10 +68,10 @@ fn main() -> anyhow::Result<()> {
 
     // Ensure DB directory exists
     let db_path = std::path::Path::new(&cli.db);
-    if let Some(parent) = db_path.parent() {
-        if !parent.as_os_str().is_empty() {
-            std::fs::create_dir_all(parent)?;
-        }
+    if let Some(parent) = db_path.parent()
+        && !parent.as_os_str().is_empty()
+    {
+        std::fs::create_dir_all(parent)?;
     }
 
     let conn = rusqlite::Connection::open(&cli.db)?;
@@ -118,7 +118,7 @@ fn main() -> anyhow::Result<()> {
             if results.is_empty() {
                 println!("No results for '{entity}'");
             } else {
-                println!("{:<40} {:<10} {}", "ENTITY", "DEPTH", "EDGE");
+                println!("{:<40} {:<10} EDGE", "ENTITY", "DEPTH");
                 println!("{}", "-".repeat(60));
                 for r in &results {
                     let path = r.entity_path.as_deref().unwrap_or(&r.entity_name);
@@ -135,7 +135,7 @@ fn main() -> anyhow::Result<()> {
 
             if let Some(e) = store.find_entity_by_path(&entity) {
                 let deps = store.dependencies(&e.id, dir);
-                println!("{:<40} {}", "ENTITY", "KIND");
+                println!("{:<40} KIND", "ENTITY");
                 println!("{}", "-".repeat(50));
                 for d in &deps {
                     let path = d.path.as_deref().unwrap_or(&d.name);
@@ -152,7 +152,7 @@ fn main() -> anyhow::Result<()> {
             if results.is_empty() {
                 println!("No co-change data for '{entity}'");
             } else {
-                println!("{:<40} {}", "ENTITY", "CONFIDENCE");
+                println!("{:<40} CONFIDENCE", "ENTITY");
                 println!("{}", "-".repeat(55));
                 for r in &results {
                     let path = r.entity_path.as_deref().unwrap_or(&r.entity_name);
@@ -167,7 +167,7 @@ fn main() -> anyhow::Result<()> {
             if results.is_empty() {
                 println!("No ownership data for '{entity}'");
             } else {
-                println!("{:<30} {}", "OWNER", "CONFIDENCE");
+                println!("{:<30} CONFIDENCE", "OWNER");
                 println!("{}", "-".repeat(45));
                 for r in &results {
                     println!("{:<30} {:.2}", r.entity_name, r.confidence);
@@ -181,7 +181,7 @@ fn main() -> anyhow::Result<()> {
             if results.is_empty() {
                 println!("No hotspot data found. Run 'index' first.");
             } else {
-                println!("{:<40} {}", "ENTITY", "CONNECTIONS");
+                println!("{:<40} CONNECTIONS", "ENTITY");
                 println!("{}", "-".repeat(55));
                 for r in &results {
                     let path = r.entity_path.as_deref().unwrap_or(&r.entity_name);

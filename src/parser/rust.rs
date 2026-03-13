@@ -88,10 +88,10 @@ fn walk_node(node: Node, source: &[u8], result: &mut ParseResult) {
             let has_body = node
                 .children(&mut node.walk())
                 .any(|c| c.kind() == "declaration_list");
-            if !has_body {
-                if let Some(name) = find_child_text(node, "identifier", source) {
-                    result.modules.push(name);
-                }
+            if !has_body
+                && let Some(name) = find_child_text(node, "identifier", source)
+            {
+                result.modules.push(name);
             }
         }
         _ => {}
