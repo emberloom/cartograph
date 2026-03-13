@@ -1,3 +1,4 @@
+use cartograph::{historian, parser, query, store};
 use clap::{Parser, Subcommand};
 
 #[derive(Parser)]
@@ -57,7 +58,140 @@ enum Commands {
     },
 }
 
-fn main() {
+fn main() -> anyhow::Result<()> {
     let cli = Cli::parse();
-    println!("Cartograph v{}", env!("CARGO_PKG_VERSION"));
+
+    tracing_subscriber::fmt()
+        .with_env_filter(tracing_subscriber::EnvFilter::from_default_env())
+        .init();
+
+    // Ensure DB directory exists
+    let db_path = std::path::Path::new(&cli.db);
+    if let Some(parent) = db_path.parent() {
+        if !parent.as_os_str().is_empty() {
+            std::fs::create_dir_all(parent)?;
+        }
+    }
+
+    let conn = rusqlite::Connection::open(&cli.db)?;
+    store::schema::init_db(&conn)?;
+
+    match cli.command {
+        Commands::Index => {
+            let repo_path = std::path::Path::new(&cli.repo).canonicalize()?;
+            let mut store = store::graph::GraphStore::new(conn)?;
+
+            println!("Indexing {}...", repo_path.display());
+
+            // Layer 1: Structure
+            parser::index_repo(&repo_path, &mut store)?;
+            println!("  Structure: done");
+
+            // Layer 2: Dynamics
+            match historian::mine_commits(&repo_path, None) {
+                Ok(commits) => {
+                    println!("  Git history: {} commits", commits.len());
+
+                    let cochanges = historian::analyze_cochanges(&commits);
+                    historian::write_cochange_edges(&mut store, &cochanges)?;
+                    println!("  Co-changes: {} pairs", cochanges.len());
+
+                    match historian::write_ownership_edges(&mut store, &repo_path) {
+                        Ok(()) => println!("  Ownership: done"),
+                        Err(e) => println!("  Ownership: skipped ({})", e),
+                    }
+                }
+                Err(e) => {
+                    println!("  Git history: skipped ({})", e);
+                    println!("  Co-changes: skipped (no git history)");
+                    println!("  Ownership: skipped (no git history)");
+                }
+            }
+
+            println!("Index complete.");
+        }
+        Commands::BlastRadius { entity, depth } => {
+            let store = store::graph::GraphStore::new(conn)?;
+            let results = query::blast_radius::query(&store, &entity, depth);
+
+            if results.is_empty() {
+                println!("No results for '{entity}'");
+            } else {
+                println!("{:<40} {:<10} {}", "ENTITY", "DEPTH", "EDGE");
+                println!("{}", "-".repeat(60));
+                for r in &results {
+                    let path = r.entity_path.as_deref().unwrap_or(&r.entity_name);
+                    println!("{:<40} {:<10} {}", path, r.depth, r.edge_kind);
+                }
+            }
+        }
+        Commands::Deps { entity, direction } => {
+            let store = store::graph::GraphStore::new(conn)?;
+            let dir = match direction.as_str() {
+                "upstream" => petgraph::Direction::Incoming,
+                _ => petgraph::Direction::Outgoing,
+            };
+
+            if let Some(e) = store.find_entity_by_path(&entity) {
+                let deps = store.dependencies(&e.id, dir);
+                println!("{:<40} {}", "ENTITY", "KIND");
+                println!("{}", "-".repeat(50));
+                for d in &deps {
+                    let path = d.path.as_deref().unwrap_or(&d.name);
+                    println!("{:<40} {:?}", path, d.kind);
+                }
+            } else {
+                println!("Entity not found: {entity}");
+            }
+        }
+        Commands::CoChanges { entity } => {
+            let store = store::graph::GraphStore::new(conn)?;
+            let results = query::co_changes(&store, &entity);
+
+            if results.is_empty() {
+                println!("No co-change data for '{entity}'");
+            } else {
+                println!("{:<40} {}", "ENTITY", "CONFIDENCE");
+                println!("{}", "-".repeat(55));
+                for r in &results {
+                    let path = r.entity_path.as_deref().unwrap_or(&r.entity_name);
+                    println!("{:<40} {:.2}", path, r.confidence);
+                }
+            }
+        }
+        Commands::WhoOwns { entity } => {
+            let store = store::graph::GraphStore::new(conn)?;
+            let results = query::ownership::query(&store, &entity);
+
+            if results.is_empty() {
+                println!("No ownership data for '{entity}'");
+            } else {
+                println!("{:<30} {}", "OWNER", "CONFIDENCE");
+                println!("{}", "-".repeat(45));
+                for r in &results {
+                    println!("{:<30} {:.2}", r.entity_name, r.confidence);
+                }
+            }
+        }
+        Commands::Hotspots { limit } => {
+            let store = store::graph::GraphStore::new(conn)?;
+            let results = query::hotspots::query(&store, limit);
+
+            if results.is_empty() {
+                println!("No hotspot data found. Run 'index' first.");
+            } else {
+                println!("{:<40} {}", "ENTITY", "CONNECTIONS");
+                println!("{}", "-".repeat(55));
+                for r in &results {
+                    let path = r.entity_path.as_deref().unwrap_or(&r.entity_name);
+                    println!("{:<40} {}", path, r.edge_count);
+                }
+            }
+        }
+        Commands::Serve { .. } => {
+            println!("MCP server not yet implemented (Task 12)");
+        }
+    }
+
+    Ok(())
 }
