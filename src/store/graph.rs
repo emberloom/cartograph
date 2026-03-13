@@ -224,6 +224,103 @@ impl GraphStore {
     pub fn entities(&self) -> &HashMap<String, Entity> {
         &self.entities
     }
+
+    /// Return all (entity, confidence) pairs reachable via outgoing edges of a given kind.
+    pub fn edges_of_kind(
+        &self,
+        entity_id: &str,
+        kind: &EdgeKind,
+    ) -> Vec<(Entity, f64)> {
+        let Some(&node) = self.node_map.get(entity_id) else {
+            return vec![];
+        };
+
+        // Build a fast lookup from (from_node_idx, to_node_idx) -> confidence using the DB.
+        // We use the in-memory graph to find neighbors, then fetch confidence from SQLite.
+        let neighbors: Vec<(String, EdgeKind)> = self
+            .graph
+            .edges_directed(node, petgraph::Direction::Outgoing)
+            .filter(|e| e.weight() == kind)
+            .filter_map(|e| {
+                let neighbor_id = self.graph[e.target()].clone();
+                Some((neighbor_id, e.weight().clone()))
+            })
+            .collect();
+
+        neighbors
+            .into_iter()
+            .filter_map(|(neighbor_id, _)| {
+                let entity = self.entities.get(&neighbor_id)?.clone();
+                // Fetch confidence from SQLite
+                let confidence: f64 = self
+                    .conn
+                    .query_row(
+                        "SELECT confidence FROM edges WHERE from_id = ?1 AND to_id = ?2 AND kind = ?3",
+                        rusqlite::params![entity_id, neighbor_id, kind.to_string()],
+                        |r| r.get(0),
+                    )
+                    .unwrap_or(1.0);
+                Some((entity, confidence))
+            })
+            .collect()
+    }
+
+    /// Return the total number of edges (in + out) for an entity — used as a hotspot proxy.
+    pub fn edge_degree(&self, entity_id: &str) -> usize {
+        let Some(&node) = self.node_map.get(entity_id) else {
+            return 0;
+        };
+        self.graph
+            .edges_directed(node, petgraph::Direction::Outgoing)
+            .count()
+            + self
+                .graph
+                .edges_directed(node, petgraph::Direction::Incoming)
+                .count()
+    }
+
+    /// BFS returning (entity, depth, edge_kind) tuples.
+    pub fn blast_radius_with_depth(
+        &self,
+        entity_id: &str,
+        max_depth: usize,
+    ) -> Vec<(Entity, usize, EdgeKind)> {
+        use std::collections::VecDeque;
+        let Some(&start_node) = self.node_map.get(entity_id) else {
+            return vec![];
+        };
+
+        let mut visited: HashMap<NodeIndex, usize> = HashMap::new();
+        let mut queue: VecDeque<(NodeIndex, usize)> = VecDeque::new();
+        let mut result: Vec<(Entity, usize, EdgeKind)> = Vec::new();
+
+        visited.insert(start_node, 0);
+        queue.push_back((start_node, 0));
+
+        while let Some((current, depth)) = queue.pop_front() {
+            if depth >= max_depth {
+                continue;
+            }
+
+            for edge_ref in self
+                .graph
+                .edges_directed(current, petgraph::Direction::Outgoing)
+            {
+                let neighbor = edge_ref.target();
+                if !visited.contains_key(&neighbor) {
+                    let new_depth = depth + 1;
+                    visited.insert(neighbor, new_depth);
+                    let neighbor_id = self.graph[neighbor].clone();
+                    if let Some(entity) = self.entities.get(&neighbor_id) {
+                        result.push((entity.clone(), new_depth, edge_ref.weight().clone()));
+                    }
+                    queue.push_back((neighbor, new_depth));
+                }
+            }
+        }
+
+        result
+    }
 }
 
 // ─── Tests ────────────────────────────────────────────────────────────────────
