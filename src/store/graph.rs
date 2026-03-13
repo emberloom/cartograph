@@ -220,6 +220,10 @@ impl GraphStore {
             .find(|e| e.path.as_deref() == Some(path))
             .cloned()
     }
+
+    pub fn entities(&self) -> &HashMap<String, Entity> {
+        &self.entities
+    }
 }
 
 // ─── Tests ────────────────────────────────────────────────────────────────────
