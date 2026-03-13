@@ -1,4 +1,4 @@
-use cartograph::{historian, parser, query, store};
+use cartograph::{historian, parser, query, server, store};
 use clap::{Parser, Subcommand};
 
 #[derive(Parser)]
@@ -63,6 +63,7 @@ fn main() -> anyhow::Result<()> {
 
     tracing_subscriber::fmt()
         .with_env_filter(tracing_subscriber::EnvFilter::from_default_env())
+        .with_writer(std::io::stderr)
         .init();
 
     // Ensure DB directory exists
@@ -189,7 +190,8 @@ fn main() -> anyhow::Result<()> {
             }
         }
         Commands::Serve { .. } => {
-            println!("MCP server not yet implemented (Task 12)");
+            let store = store::graph::GraphStore::new(conn)?;
+            server::run_mcp_server(store)?;
         }
     }
 
