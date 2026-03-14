@@ -11,18 +11,12 @@ repository = "https://github.com/emberloom/cartograph"
 rusqlite = { version = "0.32", features = ["bundled-full"] }
 petgraph = "0.7"
 
-# Git mining
-gix = { version = "0.72", features = ["max-performance"] }
-
 # AST parsing
 tree-sitter = "0.25"
 tree-sitter-rust = "0.24"
 
 # CLI
 clap = { version = "4", features = ["derive"] }
-
-# Async + server (stdio MCP in v0.1, axum for HTTP later)
-tokio = { version = "1", features = ["full"] }
 
 # Serialization
 serde = { version = "1", features = ["derive"] }

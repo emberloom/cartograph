@@ -6,6 +6,9 @@ use std::io::{BufRead, Write};
 
 use crate::store::graph::GraphStore;
 
+/// Maximum request line size (1 MB) to prevent memory exhaustion
+const MAX_REQUEST_SIZE: usize = 1_024 * 1_024;
+
 pub fn run_mcp_server(store: GraphStore) -> Result<()> {
     let stdin = std::io::stdin();
     let stdout = std::io::stdout();
@@ -22,6 +25,21 @@ pub fn run_mcp_server(store: GraphStore) -> Result<()> {
 
         let line = line.trim().to_string();
         if line.is_empty() {
+            continue;
+        }
+
+        if line.len() > MAX_REQUEST_SIZE {
+            eprintln!("[cartograph] request too large ({} bytes), skipping", line.len());
+            let error_response = json!({
+                "jsonrpc": "2.0",
+                "id": null,
+                "error": {
+                    "code": -32600,
+                    "message": "Request too large"
+                }
+            });
+            writeln!(out, "{}", serde_json::to_string(&error_response)?)?;
+            out.flush()?;
             continue;
         }
 
@@ -115,7 +133,7 @@ fn dispatch(store: &GraphStore, method: &str, id: &Value, request: &Value) -> Va
                 .cloned()
                 .unwrap_or(json!({}));
 
-            eprintln!("[cartograph] tools/call tool={tool_name} args={arguments}");
+            eprintln!("[cartograph] tools/call tool={tool_name}");
 
             match tools::execute_tool(store, tool_name, &arguments) {
                 Ok(text) => json!({

@@ -15,11 +15,27 @@ pub struct ParseResult {
 
 pub fn parse_rust_source(source: &str, _path: &Path) -> ParseResult {
     let mut parser = tree_sitter::Parser::new();
-    parser
+    if parser
         .set_language(&tree_sitter_rust::LANGUAGE.into())
-        .expect("failed to load Rust grammar");
+        .is_err()
+    {
+        tracing::error!("failed to load Rust grammar");
+        return ParseResult {
+            entities: Vec::new(),
+            imports: Vec::new(),
+            modules: Vec::new(),
+        };
+    }
 
-    let tree = parser.parse(source, None).expect("failed to parse source");
+    let Some(tree) = parser.parse(source, None) else {
+        tracing::warn!("tree-sitter failed to parse source ({} bytes)", source.len());
+        return ParseResult {
+            entities: Vec::new(),
+            imports: Vec::new(),
+            modules: Vec::new(),
+        };
+    };
+
     let root = tree.root_node();
     let source_bytes = source.as_bytes();
 

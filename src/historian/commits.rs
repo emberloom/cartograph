@@ -38,18 +38,18 @@ pub fn mine_commits(repo_path: &Path, limit: Option<usize>) -> Result<Vec<Commit
     // 1. Get commit list with metadata via --format
     // 2. Get file changes via --name-status in the same run using a record separator
 
-    let mut args = vec![
-        "log".to_string(),
-        "--name-status".to_string(),
-        "--format=COMMIT_START%n%H%n%an%n%ae%n%at%n%s".to_string(),
-    ];
-
-    if let Some(n) = limit {
-        args.push(format!("-{}", n));
-    }
+    // Cap commit limit to prevent memory exhaustion on large repos
+    const MAX_COMMITS: usize = 10_000;
+    let effective_limit = limit.map(|n| n.min(MAX_COMMITS)).unwrap_or(MAX_COMMITS);
 
     let output = Command::new("git")
-        .args(&args)
+        .args([
+            "log",
+            "--name-status",
+            "--format=COMMIT_START%n%H%n%an%n%ae%n%at%n%s",
+            &format!("-{}", effective_limit),
+            "--",
+        ])
         .current_dir(repo_path)
         .output()?;
 

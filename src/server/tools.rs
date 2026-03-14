@@ -93,13 +93,31 @@ pub fn tool_definitions() -> Vec<ToolDef> {
     ]
 }
 
+/// Maximum traversal depth for blast radius queries
+const MAX_DEPTH: usize = 10;
+/// Maximum results for hotspot queries
+const MAX_LIMIT: usize = 500;
+/// Maximum entity path length
+const MAX_ENTITY_LEN: usize = 1024;
+
+fn validate_entity(params: &Value) -> Result<&str> {
+    let entity = params["entity"]
+        .as_str()
+        .ok_or_else(|| anyhow::anyhow!("missing required param: entity"))?;
+    if entity.len() > MAX_ENTITY_LEN {
+        anyhow::bail!("entity path too long (max {} chars)", MAX_ENTITY_LEN);
+    }
+    if entity.contains("..") {
+        anyhow::bail!("entity path must not contain '..'");
+    }
+    Ok(entity)
+}
+
 pub fn execute_tool(store: &GraphStore, name: &str, params: &Value) -> Result<String> {
     match name {
         "cartograph_blast_radius" => {
-            let entity = params["entity"]
-                .as_str()
-                .ok_or_else(|| anyhow::anyhow!("missing required param: entity"))?;
-            let depth = params["depth"].as_u64().unwrap_or(3) as usize;
+            let entity = validate_entity(params)?;
+            let depth = (params["depth"].as_u64().unwrap_or(3) as usize).min(MAX_DEPTH);
 
             let results = query::blast_radius::query(store, entity, depth);
 
@@ -118,9 +136,7 @@ pub fn execute_tool(store: &GraphStore, name: &str, params: &Value) -> Result<St
         }
 
         "cartograph_dependencies" => {
-            let entity = params["entity"]
-                .as_str()
-                .ok_or_else(|| anyhow::anyhow!("missing required param: entity"))?;
+            let entity = validate_entity(params)?;
             let direction = params["direction"].as_str().unwrap_or("downstream");
 
             let dir = match direction {
@@ -148,9 +164,7 @@ pub fn execute_tool(store: &GraphStore, name: &str, params: &Value) -> Result<St
         }
 
         "cartograph_co_changes" => {
-            let entity = params["entity"]
-                .as_str()
-                .ok_or_else(|| anyhow::anyhow!("missing required param: entity"))?;
+            let entity = validate_entity(params)?;
 
             let results = query::co_changes(store, entity);
 
@@ -169,9 +183,7 @@ pub fn execute_tool(store: &GraphStore, name: &str, params: &Value) -> Result<St
         }
 
         "cartograph_who_owns" => {
-            let entity = params["entity"]
-                .as_str()
-                .ok_or_else(|| anyhow::anyhow!("missing required param: entity"))?;
+            let entity = validate_entity(params)?;
 
             let results = query::ownership::query(store, entity);
 
@@ -189,7 +201,7 @@ pub fn execute_tool(store: &GraphStore, name: &str, params: &Value) -> Result<St
         }
 
         "cartograph_hotspots" => {
-            let limit = params["limit"].as_u64().unwrap_or(20) as usize;
+            let limit = (params["limit"].as_u64().unwrap_or(20) as usize).min(MAX_LIMIT);
 
             let results = query::hotspots::query(store, limit);
 

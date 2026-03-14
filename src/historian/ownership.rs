@@ -18,8 +18,13 @@ pub struct OwnershipEntry {
 /// Run `git blame --porcelain` on `file_path` within `repo_path` and return
 /// ownership entries sorted by line count descending.
 pub fn who_owns(repo_path: &Path, file_path: &str) -> Result<Vec<OwnershipEntry>> {
+    // Validate file_path: reject paths starting with '-' (git option injection)
+    if file_path.starts_with('-') {
+        anyhow::bail!("invalid file path: {}", file_path);
+    }
+
     let output = Command::new("git")
-        .args(["blame", "--porcelain", file_path])
+        .args(["blame", "--porcelain", "--", file_path])
         .current_dir(repo_path)
         .output()?;
 

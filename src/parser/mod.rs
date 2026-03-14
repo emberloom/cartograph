@@ -66,8 +66,16 @@ pub fn index_repo(repo_path: &Path, store: &mut GraphStore) -> Result<()> {
 
         // Resolve `mod foo;` declarations to target file paths
         for mod_name in &parse_result.modules {
+            // Reject module names containing path traversal components
+            if mod_name.contains("..") || mod_name.contains('/') || mod_name.contains('\\') {
+                continue;
+            }
             let target_paths = resolve_mod_paths(&rel_path, mod_name);
             for target_rel in target_paths {
+                // Ensure resolved path doesn't escape repo (no ".." components)
+                if target_rel.contains("..") {
+                    continue;
+                }
                 if let Some(target_id) = file_ids.get(&target_rel) {
                     store.add_edge(&file_id, target_id, EdgeKind::Imports, 1.0)?;
                     break; // only the first match that exists
