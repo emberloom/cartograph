@@ -6,6 +6,17 @@ use std::collections::{HashMap, VecDeque};
 
 use crate::store::schema::{EdgeKind, Entity, EntityKind};
 
+/// Structural edge kinds — these represent code-level dependencies.
+/// Used to filter deps and blast radius (exclude co-change, ownership, etc.)
+const STRUCTURAL_EDGES: &[EdgeKind] = &[
+    EdgeKind::Imports,
+    EdgeKind::Calls,
+    EdgeKind::Inherits,
+    EdgeKind::Implements,
+    EdgeKind::Exposes,
+    EdgeKind::DependsOn,
+];
+
 // ─── GraphStore ───────────────────────────────────────────────────────────────
 
 pub struct GraphStore {
@@ -25,6 +36,15 @@ impl GraphStore {
         };
         store.load_from_db()?;
         Ok(store)
+    }
+
+    /// Clear all entities and edges (for re-indexing).
+    pub fn clear(&mut self) -> Result<()> {
+        self.conn.execute_batch("DELETE FROM edges; DELETE FROM entities;")?;
+        self.graph.clear();
+        self.node_map.clear();
+        self.entities.clear();
+        Ok(())
     }
 
     fn load_from_db(&mut self) -> Result<()> {
@@ -129,7 +149,7 @@ impl GraphStore {
         let now = chrono::Utc::now().to_rfc3339();
 
         self.conn.execute(
-            "INSERT INTO edges (from_id, to_id, kind, confidence, last_evidence, evidence_count, decay_half_life, evidence)
+            "INSERT OR REPLACE INTO edges (from_id, to_id, kind, confidence, last_evidence, evidence_count, decay_half_life, evidence)
              VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8)",
             rusqlite::params![from_id, to_id, kind.to_string(), confidence, now, 1_i64, 180.0_f64, "[]"],
         )?;
@@ -150,7 +170,28 @@ impl GraphStore {
         Ok(())
     }
 
+    /// Return structural dependencies only (imports, calls, inherits, etc.)
     pub fn dependencies(&self, entity_id: &str, direction: petgraph::Direction) -> Vec<Entity> {
+        let Some(&node) = self.node_map.get(entity_id) else {
+            return vec![];
+        };
+
+        self.graph
+            .edges_directed(node, direction)
+            .filter(|edge_ref| STRUCTURAL_EDGES.contains(edge_ref.weight()))
+            .filter_map(|edge_ref| {
+                let neighbor = match direction {
+                    petgraph::Direction::Outgoing => edge_ref.target(),
+                    petgraph::Direction::Incoming => edge_ref.source(),
+                };
+                let neighbor_id = self.graph[neighbor].clone();
+                self.entities.get(&neighbor_id).cloned()
+            })
+            .collect()
+    }
+
+    /// Return ALL neighbors regardless of edge kind
+    pub fn all_neighbors(&self, entity_id: &str, direction: petgraph::Direction) -> Vec<Entity> {
         let Some(&node) = self.node_map.get(entity_id) else {
             return vec![];
         };
@@ -176,6 +217,7 @@ impl GraphStore {
         self.dependencies(entity_id, direction)
     }
 
+    /// BFS blast radius following only structural edges (imports, calls, etc.)
     pub fn blast_radius(&self, entity_id: &str, max_depth: usize) -> Vec<Entity> {
         let Some(&start_node) = self.node_map.get(entity_id) else {
             return vec![];
@@ -196,6 +238,7 @@ impl GraphStore {
             for edge_ref in self
                 .graph
                 .edges_directed(current, petgraph::Direction::Outgoing)
+                .filter(|e| STRUCTURAL_EDGES.contains(e.weight()))
             {
                 let neighbor = edge_ref.target();
                 if let std::collections::hash_map::Entry::Vacant(e) = visited.entry(neighbor) {
@@ -278,13 +321,12 @@ impl GraphStore {
                 .count()
     }
 
-    /// BFS returning (entity, depth, edge_kind) tuples.
+    /// BFS returning (entity, depth, edge_kind) tuples — structural edges only.
     pub fn blast_radius_with_depth(
         &self,
         entity_id: &str,
         max_depth: usize,
     ) -> Vec<(Entity, usize, EdgeKind)> {
-        use std::collections::VecDeque;
         let Some(&start_node) = self.node_map.get(entity_id) else {
             return vec![];
         };
@@ -304,6 +346,7 @@ impl GraphStore {
             for edge_ref in self
                 .graph
                 .edges_directed(current, petgraph::Direction::Outgoing)
+                .filter(|e| STRUCTURAL_EDGES.contains(e.weight()))
             {
                 let neighbor = edge_ref.target();
                 if let std::collections::hash_map::Entry::Vacant(e) = visited.entry(neighbor) {

@@ -10,7 +10,12 @@ use crate::store::schema::{EdgeKind, EntityKind};
 /// Walk `repo_path` recursively, parse all `.rs` files (skipping `target/`),
 /// and populate the graph store with File/Function/Struct/Trait entities and
 /// inter-file dependency edges.
+///
+/// Safe to call multiple times — clears existing entities/edges before re-indexing.
 pub fn index_repo(repo_path: &Path, store: &mut GraphStore) -> Result<()> {
+    // Clear existing data for a clean re-index
+    store.clear()?;
+
     // Collect all .rs files first (skip target/ directory)
     let mut rs_files: Vec<std::path::PathBuf> = Vec::new();
     collect_rs_files(repo_path, repo_path, &mut rs_files)?;
