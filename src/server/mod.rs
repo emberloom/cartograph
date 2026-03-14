@@ -52,8 +52,7 @@ pub fn run_mcp_server(store: GraphStore) -> Result<()> {
                     "id": null,
                     "error": {
                         "code": -32700,
-                        "message": "Parse error",
-                        "data": e.to_string()
+                        "message": "Invalid JSON in request"
                     }
                 });
                 writeln!(out, "{}", serde_json::to_string(&error_response)?)?;
@@ -155,8 +154,7 @@ fn dispatch(store: &GraphStore, method: &str, id: &Value, request: &Value) -> Va
                         "id": id,
                         "error": {
                             "code": -32603,
-                            "message": "Tool execution error",
-                            "data": e.to_string()
+                            "message": "Tool execution error"
                         }
                     })
                 }

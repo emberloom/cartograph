@@ -23,11 +23,11 @@ pub fn index_repo(repo_path: &Path, store: &mut GraphStore) -> Result<()> {
     // First pass: create a File entity for every .rs file and record path→id mapping
     let mut file_ids: std::collections::HashMap<String, String> = std::collections::HashMap::new();
     for abs_path in &rs_files {
-        let rel_path = abs_path
-            .strip_prefix(repo_path)
-            .unwrap()
-            .to_string_lossy()
-            .to_string();
+        let Some(rel) = abs_path.strip_prefix(repo_path).ok() else {
+            tracing::warn!("skipping path outside repo: {}", abs_path.display());
+            continue;
+        };
+        let rel_path = rel.to_string_lossy().to_string();
         let file_name = abs_path
             .file_name()
             .unwrap_or_default()
@@ -39,11 +39,10 @@ pub fn index_repo(repo_path: &Path, store: &mut GraphStore) -> Result<()> {
 
     // Second pass: parse each file, add child entities, add inter-file edges
     for abs_path in &rs_files {
-        let rel_path = abs_path
-            .strip_prefix(repo_path)
-            .unwrap()
-            .to_string_lossy()
-            .to_string();
+        let Some(rel) = abs_path.strip_prefix(repo_path).ok() else {
+            continue;
+        };
+        let rel_path = rel.to_string_lossy().to_string();
         let file_id = file_ids[&rel_path].clone();
 
         let source = std::fs::read_to_string(abs_path)?;
