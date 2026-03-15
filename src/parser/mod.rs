@@ -22,8 +22,10 @@ pub fn index_repo(repo_path: &Path, store: &mut GraphStore) -> Result<()> {
     let mut all_files: Vec<std::path::PathBuf> = Vec::new();
     collect_source_files(repo_path, repo_path, &mut all_files)?;
 
-    // First pass: create a File entity for every source file and record path→id mapping
+    // Pass 1: register File entities
     let mut file_ids: std::collections::HashMap<String, String> = std::collections::HashMap::new();
+    let mut rs_count: usize = 0;
+    let mut ts_count: usize = 0;
     for abs_path in &all_files {
         let Some(rel) = abs_path.strip_prefix(repo_path).ok() else {
             tracing::warn!("skipping path outside repo: {}", abs_path.display());
@@ -35,72 +37,96 @@ pub fn index_repo(repo_path: &Path, store: &mut GraphStore) -> Result<()> {
             .unwrap_or_default()
             .to_string_lossy()
             .to_string();
-        let id = store.add_entity(EntityKind::File, &file_name, Some(&rel_path), Some("rust"))?;
+        let lang = match abs_path.extension().map(|e| e.to_string_lossy().to_string()).as_deref() {
+            Some("rs") => { rs_count += 1; "rust" }
+            _ => { ts_count += 1; "typescript" }
+        };
+        let id = store.add_entity(EntityKind::File, &file_name, Some(&rel_path), Some(lang))?;
         file_ids.insert(rel_path, id);
     }
 
-    // Second pass: parse each file, add child entities, add inter-file edges
+    // Pass 2: parse each file and wire edges
     for abs_path in &all_files {
         let Some(rel) = abs_path.strip_prefix(repo_path).ok() else {
             continue;
         };
         let rel_path = rel.to_string_lossy().to_string();
-        let file_id = file_ids[&rel_path].clone();
 
-        let source = std::fs::read_to_string(abs_path)?;
-        let parse_result = parse_rust_source(&source, abs_path);
+        let file_id = match file_ids.get(&rel_path) {
+            Some(id) => id.clone(),
+            None => continue,
+        };
 
-        // Add function/struct/trait/impl entities as children of this file.
-        // Use a qualified path `<file_path>::<name>` so that find_entity_by_path
-        // on the bare file path still resolves to the File entity, not a child.
-        for entity in &parse_result.entities {
-            let kind = match entity.kind.as_str() {
-                "Function" => EntityKind::Function,
-                "Struct" => EntityKind::Struct,
-                "Trait" => EntityKind::Trait,
-                "Impl" => EntityKind::Impl,
-                _ => continue,
-            };
-            let qualified_path = format!("{}::{}", rel_path, entity.name);
-            store.add_entity(kind, &entity.name, Some(&qualified_path), Some("rust"))?;
-        }
+        let ext = abs_path.extension().map(|e| e.to_string_lossy().to_string());
+        match ext.as_deref() {
+            Some("rs") => {
+                let source = std::fs::read_to_string(abs_path)?;
+                let parse_result = parse_rust_source(&source, abs_path);
 
-        // Resolve `mod foo;` declarations to target file paths
-        for mod_name in &parse_result.modules {
-            // Reject module names containing path traversal components
-            if mod_name.contains("..") || mod_name.contains('/') || mod_name.contains('\\') {
-                continue;
+                // Add function/struct/trait/impl entities as children of this file.
+                // Use a qualified path `<file_path>::<name>` so that find_entity_by_path
+                // on the bare file path still resolves to the File entity, not a child.
+                for entity in &parse_result.entities {
+                    let kind = match entity.kind.as_str() {
+                        "Function" => EntityKind::Function,
+                        "Struct" => EntityKind::Struct,
+                        "Trait" => EntityKind::Trait,
+                        "Impl" => EntityKind::Impl,
+                        _ => continue,
+                    };
+                    let qualified_path = format!("{}::{}", rel_path, entity.name);
+                    store.add_entity(kind, &entity.name, Some(&qualified_path), Some("rust"))?;
+                }
+
+                // Resolve `mod foo;` declarations to target file paths
+                for mod_name in &parse_result.modules {
+                    // Reject module names containing path traversal components
+                    if mod_name.contains("..") || mod_name.contains('/') || mod_name.contains('\\') {
+                        continue;
+                    }
+                    let target_paths = resolve_mod_paths(&rel_path, mod_name);
+                    for target_rel in target_paths {
+                        // Ensure resolved path doesn't escape repo (no ".." components)
+                        if target_rel.contains("..") {
+                            continue;
+                        }
+                        if let Some(target_id) = file_ids.get(&target_rel) {
+                            store.add_edge(&file_id, target_id, EdgeKind::Imports, 1.0)?;
+                            break; // only the first match that exists
+                        }
+                    }
+                }
+
+                // Resolve `use crate::…` imports to target file paths
+                for import in &parse_result.imports {
+                    // Only handle crate-internal paths starting with "crate::"
+                    if let Some(inner) = import.strip_prefix("crate::") {
+                        let module_path = inner.split("::").next().unwrap_or("");
+                        if module_path.is_empty() {
+                            continue;
+                        }
+                        // Attempt to find the file that corresponds to this module
+                        let candidate = format!("src/{}.rs", module_path);
+                        if let Some(target_id) = file_ids.get(&candidate) {
+                            store.add_edge(&file_id, target_id, EdgeKind::DependsOn, 1.0)?;
+                        }
+                    }
+                }
             }
-            let target_paths = resolve_mod_paths(&rel_path, mod_name);
-            for target_rel in target_paths {
-                // Ensure resolved path doesn't escape repo (no ".." components)
-                if target_rel.contains("..") {
-                    continue;
-                }
-                if let Some(target_id) = file_ids.get(&target_rel) {
-                    store.add_edge(&file_id, target_id, EdgeKind::Imports, 1.0)?;
-                    break; // only the first match that exists
+            Some("ts") | Some("tsx") => {
+                let source = std::fs::read_to_string(abs_path)?;
+                let parse_result = parse_typescript_source(&source, abs_path);
+                for specifier in &parse_result.imports {
+                    if let Some(target_id) = resolve_ts_import(&rel_path, specifier, &file_ids) {
+                        store.add_edge(&file_id, &target_id, EdgeKind::Imports, 1.0)?;
+                    }
                 }
             }
-        }
-
-        // Resolve `use crate::…` imports to target file paths
-        for import in &parse_result.imports {
-            // Only handle crate-internal paths starting with "crate::"
-            if let Some(inner) = import.strip_prefix("crate::") {
-                let module_path = inner.split("::").next().unwrap_or("");
-                if module_path.is_empty() {
-                    continue;
-                }
-                // Attempt to find the file that corresponds to this module
-                let candidate = format!("src/{}.rs", module_path);
-                if let Some(target_id) = file_ids.get(&candidate) {
-                    store.add_edge(&file_id, target_id, EdgeKind::DependsOn, 1.0)?;
-                }
-            }
+            _ => {}
         }
     }
 
+    let _ = (rs_count, ts_count);
     Ok(())
 }
 
@@ -134,6 +160,49 @@ fn collect_source_files(_root: &Path, dir: &Path, out: &mut Vec<std::path::PathB
         }
     }
     Ok(())
+}
+
+/// Resolve a TypeScript ESM import specifier to a `file_ids` entity id.
+///
+/// Returns `Some(entity_id)` if a target file is found, `None` otherwise.
+///
+/// - Non-relative specifiers (no `./` or `../`) → `None`
+/// - Strips extension from stem, tries: `<stem>.ts`, `<stem>/index.ts`, `<stem>.tsx`, `<stem>/index.tsx`
+/// - Rejects resolved paths containing `..` (path traversal guard)
+fn resolve_ts_import(
+    declaring_rel: &str,
+    specifier: &str,
+    file_ids: &std::collections::HashMap<String, String>,
+) -> Option<String> {
+    if !specifier.starts_with("./") && !specifier.starts_with("../") {
+        return None;
+    }
+
+    let declaring_dir = Path::new(declaring_rel).parent().unwrap_or(Path::new(""));
+
+    let spec_path = Path::new(specifier);
+    let stem = spec_path.file_stem().unwrap_or_default().to_string_lossy().to_string();
+    let spec_dir = spec_path.parent().unwrap_or(Path::new(".")).to_string_lossy().to_string();
+    let spec_dir = if spec_dir == "." { String::new() } else { spec_dir + "/" };
+
+    let candidates: Vec<String> = vec![
+        format!("{}{}.ts", spec_dir, stem),
+        format!("{}{}/index.ts", spec_dir, stem),
+        format!("{}{}.tsx", spec_dir, stem),
+        format!("{}{}/index.tsx", spec_dir, stem),
+    ];
+
+    for candidate in &candidates {
+        let joined = declaring_dir.join(candidate);
+        let joined_str = joined.to_string_lossy().to_string();
+        if joined_str.contains("..") {
+            continue;
+        }
+        if let Some(id) = file_ids.get(&joined_str) {
+            return Some(id.clone());
+        }
+    }
+    None
 }
 
 /// Given the relative path of the file containing `mod <name>;` and the module
@@ -216,6 +285,48 @@ mod tests {
             );
         }
         assert_eq!(files.len(), 5, "sample_ts_repo/src has 5 .ts files, got: {:?}", files);
+    }
+
+    #[test]
+    fn test_ts_resolution_js_extension_rewrite() {
+        let mut file_ids = std::collections::HashMap::new();
+        file_ids.insert("src/utils.ts".to_string(), "id-utils".to_string());
+        let result = resolve_ts_import("src/main.ts", "./utils.js", &file_ids);
+        assert_eq!(result, Some("id-utils".to_string()),
+            "expected id-utils from .js→.ts rewrite");
+    }
+
+    #[test]
+    fn test_ts_resolution_no_extension() {
+        let mut file_ids = std::collections::HashMap::new();
+        file_ids.insert("src/utils.ts".to_string(), "id-utils".to_string());
+        let result = resolve_ts_import("src/main.ts", "./utils", &file_ids);
+        assert_eq!(result, Some("id-utils".to_string()),
+            "expected id-utils for bare specifier");
+    }
+
+    #[test]
+    fn test_ts_resolution_index_fallback() {
+        let mut file_ids = std::collections::HashMap::new();
+        file_ids.insert("src/utils/index.ts".to_string(), "id-utils-idx".to_string());
+        let result = resolve_ts_import("src/main.ts", "./utils", &file_ids);
+        assert_eq!(result, Some("id-utils-idx".to_string()),
+            "expected index.ts fallback");
+    }
+
+    #[test]
+    fn test_ts_resolution_non_relative_skipped() {
+        let file_ids = std::collections::HashMap::new();
+        let result = resolve_ts_import("src/main.ts", "vitest", &file_ids);
+        assert_eq!(result, None, "non-relative specifiers must return None");
+    }
+
+    #[test]
+    fn test_ts_resolution_path_traversal_rejected() {
+        let mut file_ids = std::collections::HashMap::new();
+        file_ids.insert("../outside.ts".to_string(), "danger".to_string());
+        let result = resolve_ts_import("src/main.ts", "../../outside", &file_ids);
+        assert_eq!(result, None, "path traversal must be rejected");
     }
 
     #[test]
