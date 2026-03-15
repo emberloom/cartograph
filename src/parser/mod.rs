@@ -18,13 +18,13 @@ pub fn index_repo(repo_path: &Path, store: &mut GraphStore) -> Result<()> {
     // Clear existing data for a clean re-index
     store.clear()?;
 
-    // Collect all .rs files first (skip target/ directory)
-    let mut rs_files: Vec<std::path::PathBuf> = Vec::new();
-    collect_rs_files(repo_path, repo_path, &mut rs_files)?;
+    // Collect all source files first (skip target/, node_modules/, etc.)
+    let mut all_files: Vec<std::path::PathBuf> = Vec::new();
+    collect_source_files(repo_path, repo_path, &mut all_files)?;
 
-    // First pass: create a File entity for every .rs file and record path→id mapping
+    // First pass: create a File entity for every source file and record path→id mapping
     let mut file_ids: std::collections::HashMap<String, String> = std::collections::HashMap::new();
-    for abs_path in &rs_files {
+    for abs_path in &all_files {
         let Some(rel) = abs_path.strip_prefix(repo_path).ok() else {
             tracing::warn!("skipping path outside repo: {}", abs_path.display());
             continue;
@@ -40,7 +40,7 @@ pub fn index_repo(repo_path: &Path, store: &mut GraphStore) -> Result<()> {
     }
 
     // Second pass: parse each file, add child entities, add inter-file edges
-    for abs_path in &rs_files {
+    for abs_path in &all_files {
         let Some(rel) = abs_path.strip_prefix(repo_path).ok() else {
             continue;
         };
@@ -104,19 +104,33 @@ pub fn index_repo(repo_path: &Path, store: &mut GraphStore) -> Result<()> {
     Ok(())
 }
 
-/// Recursively collect all `.rs` files under `dir`, skipping `target/`.
-fn collect_rs_files(_root: &Path, dir: &Path, out: &mut Vec<std::path::PathBuf>) -> Result<()> {
+/// Recursively collect all `.rs`, `.ts`, and `.tsx` source files under `dir`.
+///
+/// Skips directories: `target/`, `node_modules/`, `dist/`, `.next/`, `build/`
+/// Skips `.d.ts` files (TypeScript declaration files — no runtime code).
+fn collect_source_files(_root: &Path, dir: &Path, out: &mut Vec<std::path::PathBuf>) -> Result<()> {
+    let skip_dirs = ["target", "node_modules", "dist", ".next", "build"];
     for entry in std::fs::read_dir(dir)? {
         let entry = entry?;
         let path = entry.path();
         if path.is_dir() {
-            // Skip target directory
-            if path.file_name().map(|n| n == "target").unwrap_or(false) {
-                continue;
+            if let Some(name) = path.file_name() {
+                if skip_dirs.contains(&name.to_string_lossy().as_ref()) {
+                    continue;
+                }
             }
-            collect_rs_files(_root, &path, out)?;
-        } else if path.extension().map(|e| e == "rs").unwrap_or(false) {
-            out.push(path);
+            collect_source_files(_root, &path, out)?;
+        } else {
+            let ext = path.extension().map(|e| e.to_string_lossy().to_string());
+            match ext.as_deref() {
+                Some("rs") => out.push(path),
+                Some("ts") | Some("tsx") => {
+                    if !path.to_string_lossy().ends_with(".d.ts") {
+                        out.push(path);
+                    }
+                }
+                _ => {}
+            }
         }
     }
     Ok(())
@@ -173,6 +187,36 @@ mod tests {
     use super::*;
     use crate::store::graph::GraphStore;
     use std::path::Path;
+
+    #[test]
+    fn test_collect_source_files_finds_ts_and_rs() {
+        let repo_path = Path::new(env!("CARGO_MANIFEST_DIR")).join("fixtures/sample_mixed_repo");
+        let mut files: Vec<std::path::PathBuf> = Vec::new();
+        collect_source_files(&repo_path, &repo_path, &mut files).unwrap();
+
+        let names: Vec<String> = files
+            .iter()
+            .map(|p| p.file_name().unwrap().to_string_lossy().to_string())
+            .collect();
+
+        assert!(names.contains(&"lib.rs".to_string()), "should find lib.rs");
+        assert!(names.contains(&"index.ts".to_string()), "should find index.ts");
+        assert_eq!(files.len(), 2, "should find exactly 2 files, got: {:?}", names);
+    }
+
+    #[test]
+    fn test_collect_source_files_skips_dts() {
+        let repo = Path::new(env!("CARGO_MANIFEST_DIR")).join("fixtures/sample_ts_repo");
+        let mut files: Vec<std::path::PathBuf> = Vec::new();
+        collect_source_files(&repo, &repo, &mut files).unwrap();
+        for f in &files {
+            assert!(
+                !f.to_string_lossy().ends_with(".d.ts"),
+                "should not collect .d.ts files: {:?}", f
+            );
+        }
+        assert_eq!(files.len(), 5, "sample_ts_repo/src has 5 .ts files, got: {:?}", files);
+    }
 
     #[test]
     fn test_index_sample_repo() {
