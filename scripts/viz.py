@@ -179,27 +179,15 @@ def build_data(files, struct_edges, cochange_edges, owner_of,
             cochange_partners[e["to_id"]].add(e["from_id"])
     cochange_count = {fid: len(partners) for fid, partners in cochange_partners.items()}
 
-    # Owner count per file (for risk multiplier)
-    owner_count_per_file = defaultdict(int)
-    for r in files_sorted:
-        fid = r["id"]
-        if fid in owner_of:
-            owner_count_per_file[fid] = 1  # primary owner exists
-        # Future: count distinct owners from all owned_by edges
-
-    # Risk scores: cochange_count * blast_size * (1/owner_count if available)
+    # Risk scores: cochange_count * blast_size, normalized 0-1
+    # Note: ownership factor is deferred to Phase 2 (requires multi-owner data)
     risk_scores = {}
     for r in files_sorted:
         fid = r["id"]
         blast = blast_radius_bfs(fid, struct_adj, depth=3)
         cc = cochange_count.get(fid, 0)
         bs = len(blast)
-        raw = cc * bs
-        # Apply ownership multiplier if ownership data exists
-        oc = owner_count_per_file.get(fid, 0)
-        if oc > 0:
-            raw = raw * (1.0 / oc)
-        risk_scores[fid] = raw
+        risk_scores[fid] = cc * bs
 
     max_risk = max(risk_scores.values()) if risk_scores else 1
     if max_risk == 0:
@@ -213,14 +201,17 @@ def build_data(files, struct_edges, cochange_edges, owner_of,
         risk_scores, owner_of,
     )
 
-    # Struct edges as [idx, idx] pairs
+    # Struct edges as [idx, idx] pairs (deduplicated)
     struct_edge_pairs = []
+    seen_struct = set()
     for e in struct_edges:
         if e["from_id"] in file_idx and e["to_id"] in file_idx:
-            struct_edge_pairs.append([
-                file_idx[e["from_id"]],
-                file_idx[e["to_id"]],
-            ])
+            a = file_idx[e["from_id"]]
+            b = file_idx[e["to_id"]]
+            key = (min(a, b), max(a, b))
+            if key not in seen_struct:
+                seen_struct.add(key)
+                struct_edge_pairs.append([a, b])
 
     # Co-change by node (top 20 per file, keyed by string idx)
     cochange_by_node = defaultdict(list)
