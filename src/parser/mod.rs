@@ -1,5 +1,7 @@
 pub mod rust;
 pub use rust::{ParseResult, ParsedEntity, parse_rust_source};
+pub mod typescript;
+pub use typescript::parse_typescript_source;
 
 use anyhow::Result;
 use std::path::Path;
