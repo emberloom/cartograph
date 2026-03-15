@@ -81,8 +81,15 @@ fn main() -> anyhow::Result<()> {
             println!("Indexing {}...", repo_path.display());
 
             // Layer 1: Structure
-            parser::index_repo(&repo_path, &mut store)?;
-            println!("  Structure: done");
+            let (rs_count, ts_count) = parser::index_repo(&repo_path, &mut store)?;
+            if ts_count > 0 {
+                println!(
+                    "  Structure: {} Rust files, {} TypeScript files",
+                    rs_count, ts_count
+                );
+            } else {
+                println!("  Structure: {} Rust files", rs_count);
+            }
 
             // Layer 2: Dynamics
             match historian::mine_commits(&repo_path, None) {

@@ -14,7 +14,7 @@ use crate::store::schema::{EdgeKind, EntityKind};
 /// inter-file dependency edges.
 ///
 /// Safe to call multiple times — clears existing entities/edges before re-indexing.
-pub fn index_repo(repo_path: &Path, store: &mut GraphStore) -> Result<()> {
+pub fn index_repo(repo_path: &Path, store: &mut GraphStore) -> Result<(usize, usize)> {
     // Clear existing data for a clean re-index
     store.clear()?;
 
@@ -37,9 +37,19 @@ pub fn index_repo(repo_path: &Path, store: &mut GraphStore) -> Result<()> {
             .unwrap_or_default()
             .to_string_lossy()
             .to_string();
-        let lang = match abs_path.extension().map(|e| e.to_string_lossy().to_string()).as_deref() {
-            Some("rs") => { rs_count += 1; "rust" }
-            _ => { ts_count += 1; "typescript" }
+        let lang = match abs_path
+            .extension()
+            .map(|e| e.to_string_lossy().to_string())
+            .as_deref()
+        {
+            Some("rs") => {
+                rs_count += 1;
+                "rust"
+            }
+            _ => {
+                ts_count += 1;
+                "typescript"
+            }
         };
         let id = store.add_entity(EntityKind::File, &file_name, Some(&rel_path), Some(lang))?;
         file_ids.insert(rel_path, id);
@@ -57,7 +67,9 @@ pub fn index_repo(repo_path: &Path, store: &mut GraphStore) -> Result<()> {
             None => continue,
         };
 
-        let ext = abs_path.extension().map(|e| e.to_string_lossy().to_string());
+        let ext = abs_path
+            .extension()
+            .map(|e| e.to_string_lossy().to_string());
         match ext.as_deref() {
             Some("rs") => {
                 let source = std::fs::read_to_string(abs_path)?;
@@ -81,7 +93,8 @@ pub fn index_repo(repo_path: &Path, store: &mut GraphStore) -> Result<()> {
                 // Resolve `mod foo;` declarations to target file paths
                 for mod_name in &parse_result.modules {
                     // Reject module names containing path traversal components
-                    if mod_name.contains("..") || mod_name.contains('/') || mod_name.contains('\\') {
+                    if mod_name.contains("..") || mod_name.contains('/') || mod_name.contains('\\')
+                    {
                         continue;
                     }
                     let target_paths = resolve_mod_paths(&rel_path, mod_name);
@@ -126,8 +139,7 @@ pub fn index_repo(repo_path: &Path, store: &mut GraphStore) -> Result<()> {
         }
     }
 
-    let _ = (rs_count, ts_count);
-    Ok(())
+    Ok((rs_count, ts_count))
 }
 
 /// Recursively collect all `.rs`, `.ts`, and `.tsx` source files under `dir`.
@@ -140,10 +152,10 @@ fn collect_source_files(_root: &Path, dir: &Path, out: &mut Vec<std::path::PathB
         let entry = entry?;
         let path = entry.path();
         if path.is_dir() {
-            if let Some(name) = path.file_name() {
-                if skip_dirs.contains(&name.to_string_lossy().as_ref()) {
-                    continue;
-                }
+            if let Some(name) = path.file_name()
+                && skip_dirs.contains(&name.to_string_lossy().as_ref())
+            {
+                continue;
             }
             collect_source_files(_root, &path, out)?;
         } else {
@@ -181,9 +193,21 @@ fn resolve_ts_import(
     let declaring_dir = Path::new(declaring_rel).parent().unwrap_or(Path::new(""));
 
     let spec_path = Path::new(specifier);
-    let stem = spec_path.file_stem().unwrap_or_default().to_string_lossy().to_string();
-    let spec_dir = spec_path.parent().unwrap_or(Path::new(".")).to_string_lossy().to_string();
-    let spec_dir = if spec_dir == "." { String::new() } else { spec_dir + "/" };
+    let stem = spec_path
+        .file_stem()
+        .unwrap_or_default()
+        .to_string_lossy()
+        .to_string();
+    let spec_dir = spec_path
+        .parent()
+        .unwrap_or(Path::new("."))
+        .to_string_lossy()
+        .to_string();
+    let spec_dir = if spec_dir == "." {
+        String::new()
+    } else {
+        spec_dir + "/"
+    };
 
     let candidates: Vec<String> = vec![
         format!("{}{}.ts", spec_dir, stem),
@@ -269,8 +293,16 @@ mod tests {
             .collect();
 
         assert!(names.contains(&"lib.rs".to_string()), "should find lib.rs");
-        assert!(names.contains(&"index.ts".to_string()), "should find index.ts");
-        assert_eq!(files.len(), 2, "should find exactly 2 files, got: {:?}", names);
+        assert!(
+            names.contains(&"index.ts".to_string()),
+            "should find index.ts"
+        );
+        assert_eq!(
+            files.len(),
+            2,
+            "should find exactly 2 files, got: {:?}",
+            names
+        );
     }
 
     #[test]
@@ -281,10 +313,16 @@ mod tests {
         for f in &files {
             assert!(
                 !f.to_string_lossy().ends_with(".d.ts"),
-                "should not collect .d.ts files: {:?}", f
+                "should not collect .d.ts files: {:?}",
+                f
             );
         }
-        assert_eq!(files.len(), 5, "sample_ts_repo/src has 5 .ts files, got: {:?}", files);
+        assert_eq!(
+            files.len(),
+            5,
+            "sample_ts_repo/src has 5 .ts files, got: {:?}",
+            files
+        );
     }
 
     #[test]
@@ -292,8 +330,11 @@ mod tests {
         let mut file_ids = std::collections::HashMap::new();
         file_ids.insert("src/utils.ts".to_string(), "id-utils".to_string());
         let result = resolve_ts_import("src/main.ts", "./utils.js", &file_ids);
-        assert_eq!(result, Some("id-utils".to_string()),
-            "expected id-utils from .js→.ts rewrite");
+        assert_eq!(
+            result,
+            Some("id-utils".to_string()),
+            "expected id-utils from .js→.ts rewrite"
+        );
     }
 
     #[test]
@@ -301,8 +342,11 @@ mod tests {
         let mut file_ids = std::collections::HashMap::new();
         file_ids.insert("src/utils.ts".to_string(), "id-utils".to_string());
         let result = resolve_ts_import("src/main.ts", "./utils", &file_ids);
-        assert_eq!(result, Some("id-utils".to_string()),
-            "expected id-utils for bare specifier");
+        assert_eq!(
+            result,
+            Some("id-utils".to_string()),
+            "expected id-utils for bare specifier"
+        );
     }
 
     #[test]
@@ -310,8 +354,11 @@ mod tests {
         let mut file_ids = std::collections::HashMap::new();
         file_ids.insert("src/utils/index.ts".to_string(), "id-utils-idx".to_string());
         let result = resolve_ts_import("src/main.ts", "./utils", &file_ids);
-        assert_eq!(result, Some("id-utils-idx".to_string()),
-            "expected index.ts fallback");
+        assert_eq!(
+            result,
+            Some("id-utils-idx".to_string()),
+            "expected index.ts fallback"
+        );
     }
 
     #[test]

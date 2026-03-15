@@ -266,6 +266,15 @@ impl GraphStore {
         &self.entities
     }
 
+    /// Return all entities in the graph.
+    pub fn all_entities(&self) -> Vec<Entity> {
+        self.graph
+            .node_indices()
+            .map(|i| self.graph[i].clone())
+            .filter_map(|id| self.entities.get(&id).cloned())
+            .collect()
+    }
+
     /// Return all (entity, confidence) pairs reachable via outgoing edges of a given kind.
     pub fn edges_of_kind(&self, entity_id: &str, kind: &EdgeKind) -> Vec<(Entity, f64)> {
         let Some(&node) = self.node_map.get(entity_id) else {
@@ -338,20 +347,28 @@ impl GraphStore {
                 continue;
             }
 
-            for edge_ref in self
-                .graph
-                .edges_directed(current, petgraph::Direction::Outgoing)
-                .filter(|e| STRUCTURAL_EDGES.contains(e.weight()))
-            {
-                let neighbor = edge_ref.target();
-                if let std::collections::hash_map::Entry::Vacant(e) = visited.entry(neighbor) {
-                    let new_depth = depth + 1;
-                    e.insert(new_depth);
-                    let neighbor_id = self.graph[neighbor].clone();
-                    if let Some(entity) = self.entities.get(&neighbor_id) {
-                        result.push((entity.clone(), new_depth, edge_ref.weight().clone()));
+            // Follow both outgoing (what this depends on) and incoming
+            // (who depends on this) edges so blast radius captures the full
+            // impact: files that import this entity are also reachable.
+            for direction in [petgraph::Direction::Outgoing, petgraph::Direction::Incoming] {
+                for edge_ref in self
+                    .graph
+                    .edges_directed(current, direction)
+                    .filter(|e| STRUCTURAL_EDGES.contains(e.weight()))
+                {
+                    let neighbor = match direction {
+                        petgraph::Direction::Outgoing => edge_ref.target(),
+                        petgraph::Direction::Incoming => edge_ref.source(),
+                    };
+                    if let std::collections::hash_map::Entry::Vacant(e) = visited.entry(neighbor) {
+                        let new_depth = depth + 1;
+                        e.insert(new_depth);
+                        let neighbor_id = self.graph[neighbor].clone();
+                        if let Some(entity) = self.entities.get(&neighbor_id) {
+                            result.push((entity.clone(), new_depth, edge_ref.weight().clone()));
+                        }
+                        queue.push_back((neighbor, new_depth));
                     }
-                    queue.push_back((neighbor, new_depth));
                 }
             }
         }
