@@ -10,6 +10,8 @@
 [![Version](https://img.shields.io/github/v/tag/emberloom/cartograph?label=version&color=blue)](https://github.com/emberloom/cartograph/releases)
 [![Status](https://img.shields.io/badge/status-active%20development-yellow.svg)](CHANGELOG.md)
 
+**[→ Live demo — ripgrep visualized](https://emberloom.github.io/cartograph/demo.html)**
+
 </div>
 
 ---
@@ -27,6 +29,7 @@ Cartograph builds a **structural and historical model of any codebase**. It pars
 
 ## Table of Contents
 
+- [Demo](#demo)
 - [What's New](#whats-new)
 - [Quick Start](#quick-start)
 - [MCP Setup](#mcp-setup-for-claude-code)
@@ -35,6 +38,23 @@ Cartograph builds a **structural and historical model of any codebase**. It pars
 - [v0.1.0 Scope](#v010-scope)
 - [Contributing](#contributing)
 - [License](#license)
+
+---
+
+## Demo
+
+**[Interactive visualization of ripgrep →](https://emberloom.github.io/cartograph/demo.html)**
+
+100 files, 69 import edges, 42 co-change pairs. Click any node to see its blast radius. Toggle import / co-change layers. Nodes sized by connectivity, colored by crate.
+
+Generate your own:
+
+```bash
+python3 scripts/viz.py \
+  --db /path/to/repo/.cartograph/db.sqlite \
+  --repo-name "myrepo" \
+  --out demo.html
+```
 
 ---
 
