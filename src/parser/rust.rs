@@ -2,15 +2,15 @@ use std::path::Path;
 use tree_sitter::Node;
 
 pub struct ParsedEntity {
-    pub kind: String,   // "Function", "Struct", "Trait", "Impl"
+    pub kind: String, // "Function", "Struct", "Trait", "Impl"
     pub name: String,
     pub line: usize,
 }
 
 pub struct ParseResult {
     pub entities: Vec<ParsedEntity>,
-    pub imports: Vec<String>,    // use statements (full path text)
-    pub modules: Vec<String>,    // mod declarations (just the name)
+    pub imports: Vec<String>, // use statements (full path text)
+    pub modules: Vec<String>, // mod declarations (just the name)
 }
 
 pub fn parse_rust_source(source: &str, _path: &Path) -> ParseResult {
@@ -28,7 +28,10 @@ pub fn parse_rust_source(source: &str, _path: &Path) -> ParseResult {
     }
 
     let Some(tree) = parser.parse(source, None) else {
-        tracing::warn!("tree-sitter failed to parse source ({} bytes)", source.len());
+        tracing::warn!(
+            "tree-sitter failed to parse source ({} bytes)",
+            source.len()
+        );
         return ParseResult {
             entities: Vec::new(),
             imports: Vec::new(),
@@ -104,9 +107,7 @@ fn walk_node(node: Node, source: &[u8], result: &mut ParseResult) {
             let has_body = node
                 .children(&mut node.walk())
                 .any(|c| c.kind() == "declaration_list");
-            if !has_body
-                && let Some(name) = find_child_text(node, "identifier", source)
-            {
+            if !has_body && let Some(name) = find_child_text(node, "identifier", source) {
                 result.modules.push(name);
             }
         }
@@ -122,9 +123,7 @@ fn walk_node(node: Node, source: &[u8], result: &mut ParseResult) {
 
 /// Return the UTF-8 text for a node.
 fn node_text(node: Node, source: &[u8]) -> String {
-    node.utf8_text(source)
-        .unwrap_or("")
-        .to_string()
+    node.utf8_text(source).unwrap_or("").to_string()
 }
 
 /// Find the first child of `node` whose kind matches `kind` and return its text.
@@ -150,7 +149,11 @@ mod tests {
             fn validate(user: &str) -> bool { true }
         "#;
         let result = parse_rust_source(source, Path::new("src/auth.rs"));
-        let fns: Vec<_> = result.entities.iter().filter(|e| e.kind == "Function").collect();
+        let fns: Vec<_> = result
+            .entities
+            .iter()
+            .filter(|e| e.kind == "Function")
+            .collect();
         assert_eq!(fns.len(), 2);
         assert!(fns.iter().any(|f| f.name == "login"));
         assert!(fns.iter().any(|f| f.name == "validate"));
@@ -184,7 +187,11 @@ mod tests {
             struct Internal { count: u32 }
         "#;
         let result = parse_rust_source(source, Path::new("src/auth.rs"));
-        let structs: Vec<_> = result.entities.iter().filter(|e| e.kind == "Struct").collect();
+        let structs: Vec<_> = result
+            .entities
+            .iter()
+            .filter(|e| e.kind == "Struct")
+            .collect();
         assert_eq!(structs.len(), 2);
     }
 }

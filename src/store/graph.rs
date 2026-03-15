@@ -40,7 +40,8 @@ impl GraphStore {
 
     /// Clear all entities and edges (for re-indexing).
     pub fn clear(&mut self) -> Result<()> {
-        self.conn.execute_batch("DELETE FROM edges; DELETE FROM entities;")?;
+        self.conn
+            .execute_batch("DELETE FROM edges; DELETE FROM entities;")?;
         self.graph.clear();
         self.node_map.clear();
         self.entities.clear();
@@ -58,9 +59,7 @@ impl GraphStore {
                 let metadata_str: String = row.get(5)?;
                 Ok(Entity {
                     id: row.get(0)?,
-                    kind: kind_str
-                        .parse::<EntityKind>()
-                        .unwrap_or(EntityKind::File),
+                    kind: kind_str.parse::<EntityKind>().unwrap_or(EntityKind::File),
                     name: row.get(2)?,
                     path: row.get(3)?,
                     language: row.get(4)?,
@@ -268,11 +267,7 @@ impl GraphStore {
     }
 
     /// Return all (entity, confidence) pairs reachable via outgoing edges of a given kind.
-    pub fn edges_of_kind(
-        &self,
-        entity_id: &str,
-        kind: &EdgeKind,
-    ) -> Vec<(Entity, f64)> {
+    pub fn edges_of_kind(&self, entity_id: &str, kind: &EdgeKind) -> Vec<(Entity, f64)> {
         let Some(&node) = self.node_map.get(entity_id) else {
             return vec![];
         };
@@ -370,7 +365,7 @@ impl GraphStore {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::store::schema::{EntityKind, EdgeKind};
+    use crate::store::schema::{EdgeKind, EntityKind};
 
     fn test_store() -> GraphStore {
         let conn = rusqlite::Connection::open_in_memory().unwrap();
@@ -381,8 +376,17 @@ mod tests {
     #[test]
     fn test_add_entity_and_edge() {
         let mut store = test_store();
-        let a = store.add_entity(EntityKind::File, "main.rs", Some("src/main.rs"), Some("rust")).unwrap();
-        let b = store.add_entity(EntityKind::File, "lib.rs", Some("src/lib.rs"), Some("rust")).unwrap();
+        let a = store
+            .add_entity(
+                EntityKind::File,
+                "main.rs",
+                Some("src/main.rs"),
+                Some("rust"),
+            )
+            .unwrap();
+        let b = store
+            .add_entity(EntityKind::File, "lib.rs", Some("src/lib.rs"), Some("rust"))
+            .unwrap();
         store.add_edge(&a, &b, EdgeKind::Imports, 1.0).unwrap();
 
         let deps = store.dependencies(&a, petgraph::Direction::Outgoing);
@@ -393,9 +397,15 @@ mod tests {
     #[test]
     fn test_blast_radius_bfs() {
         let mut store = test_store();
-        let a = store.add_entity(EntityKind::File, "a.rs", Some("src/a.rs"), Some("rust")).unwrap();
-        let b = store.add_entity(EntityKind::File, "b.rs", Some("src/b.rs"), Some("rust")).unwrap();
-        let c = store.add_entity(EntityKind::File, "c.rs", Some("src/c.rs"), Some("rust")).unwrap();
+        let a = store
+            .add_entity(EntityKind::File, "a.rs", Some("src/a.rs"), Some("rust"))
+            .unwrap();
+        let b = store
+            .add_entity(EntityKind::File, "b.rs", Some("src/b.rs"), Some("rust"))
+            .unwrap();
+        let c = store
+            .add_entity(EntityKind::File, "c.rs", Some("src/c.rs"), Some("rust"))
+            .unwrap();
         store.add_edge(&a, &b, EdgeKind::Imports, 1.0).unwrap();
         store.add_edge(&b, &c, EdgeKind::Imports, 1.0).unwrap();
 
@@ -406,9 +416,15 @@ mod tests {
     #[test]
     fn test_blast_radius_depth_limit() {
         let mut store = test_store();
-        let a = store.add_entity(EntityKind::File, "a.rs", Some("src/a.rs"), Some("rust")).unwrap();
-        let b = store.add_entity(EntityKind::File, "b.rs", Some("src/b.rs"), Some("rust")).unwrap();
-        let c = store.add_entity(EntityKind::File, "c.rs", Some("src/c.rs"), Some("rust")).unwrap();
+        let a = store
+            .add_entity(EntityKind::File, "a.rs", Some("src/a.rs"), Some("rust"))
+            .unwrap();
+        let b = store
+            .add_entity(EntityKind::File, "b.rs", Some("src/b.rs"), Some("rust"))
+            .unwrap();
+        let c = store
+            .add_entity(EntityKind::File, "c.rs", Some("src/c.rs"), Some("rust"))
+            .unwrap();
         store.add_edge(&a, &b, EdgeKind::Imports, 1.0).unwrap();
         store.add_edge(&b, &c, EdgeKind::Imports, 1.0).unwrap();
 
@@ -419,7 +435,14 @@ mod tests {
     #[test]
     fn test_find_entity_by_path() {
         let mut store = test_store();
-        store.add_entity(EntityKind::File, "main.rs", Some("src/main.rs"), Some("rust")).unwrap();
+        store
+            .add_entity(
+                EntityKind::File,
+                "main.rs",
+                Some("src/main.rs"),
+                Some("rust"),
+            )
+            .unwrap();
 
         let found = store.find_entity_by_path("src/main.rs");
         assert!(found.is_some());

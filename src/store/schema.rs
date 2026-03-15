@@ -190,7 +190,7 @@ pub fn init_db(conn: &Connection) -> Result<()> {
             key TEXT PRIMARY KEY,
             value TEXT NOT NULL,
             updated_at TEXT NOT NULL DEFAULT (datetime('now'))
-        );"
+        );",
     )?;
 
     Ok(())
@@ -230,7 +230,9 @@ mod tests {
         ).unwrap();
 
         let name: String = conn
-            .query_row("SELECT name FROM entities WHERE id = ?1", [&id], |r| r.get(0))
+            .query_row("SELECT name FROM entities WHERE id = ?1", [&id], |r| {
+                r.get(0)
+            })
             .unwrap();
         assert_eq!(name, "main.rs");
     }
@@ -256,7 +258,11 @@ mod tests {
         ).unwrap();
 
         let kind: String = conn
-            .query_row("SELECT kind FROM edges WHERE from_id = ?1", [&from_id], |r| r.get(0))
+            .query_row(
+                "SELECT kind FROM edges WHERE from_id = ?1",
+                [&from_id],
+                |r| r.get(0),
+            )
             .unwrap();
         assert_eq!(kind, "imports");
     }

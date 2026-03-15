@@ -1,5 +1,5 @@
-use cartograph::store::{schema, graph::GraphStore};
-use cartograph::{parser, historian, query};
+use cartograph::store::{graph::GraphStore, schema};
+use cartograph::{historian, parser, query};
 use std::path::Path;
 
 #[test]
@@ -22,11 +22,17 @@ fn test_full_pipeline_on_fixture() {
     // Verify dependency edges exist (main.rs → auth.rs via mod declaration)
     let main_entity = store.find_entity_by_path("src/main.rs").unwrap();
     let deps = store.dependencies(&main_entity.id, petgraph::Direction::Outgoing);
-    assert!(!deps.is_empty(), "main.rs should have outgoing dependencies");
+    assert!(
+        !deps.is_empty(),
+        "main.rs should have outgoing dependencies"
+    );
 
     // Verify blast radius works
     let blast = query::blast_radius::query(&store, "src/main.rs", 3);
-    assert!(!blast.is_empty(), "blast radius from main.rs should find connected entities");
+    assert!(
+        !blast.is_empty(),
+        "blast radius from main.rs should find connected entities"
+    );
 
     // Verify hotspots returns something
     let hot = query::hotspots::query(&store, 5);
@@ -38,7 +44,7 @@ fn test_git_mining_on_self() {
     // Test git mining on the cartograph repo itself
     let repo_path = Path::new(env!("CARGO_MANIFEST_DIR"));
 
-    let commits = historian::mine_commits(repo_path, Some(10)).unwrap();
+    let commits = historian::mine_commits(repo_path, None).unwrap();
     assert!(!commits.is_empty(), "should find commits in own repo");
 
     let cochanges = historian::analyze_cochanges(&commits);

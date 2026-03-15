@@ -72,7 +72,12 @@ pub fn write_cochange_edges(store: &mut GraphStore, cochanges: &[CoChange]) -> R
             Some(e) => e,
             None => continue,
         };
-        store.add_edge(&entity_a.id, &entity_b.id, EdgeKind::CoChangesWith, cc.confidence)?;
+        store.add_edge(
+            &entity_a.id,
+            &entity_b.id,
+            EdgeKind::CoChangesWith,
+            cc.confidence,
+        )?;
     }
     Ok(())
 }
@@ -80,7 +85,7 @@ pub fn write_cochange_edges(store: &mut GraphStore, cochanges: &[CoChange]) -> R
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::historian::commits::{CommitInfo, FileChange, ChangeKind};
+    use crate::historian::commits::{ChangeKind, CommitInfo, FileChange};
 
     fn make_commit(hash: &str, files: &[&str]) -> CommitInfo {
         CommitInfo {
@@ -89,10 +94,13 @@ mod tests {
             email: "test@test.com".to_string(),
             timestamp: 0,
             message: "test".to_string(),
-            files_changed: files.iter().map(|f| FileChange {
-                path: f.to_string(),
-                kind: ChangeKind::Modified,
-            }).collect(),
+            files_changed: files
+                .iter()
+                .map(|f| FileChange {
+                    path: f.to_string(),
+                    kind: ChangeKind::Modified,
+                })
+                .collect(),
         }
     }
 
@@ -110,17 +118,15 @@ mod tests {
         let cochanges = analyze_cochanges(&commits);
 
         // a.rs + b.rs should have count 5, a.rs + c.rs should have count 1
-        let ab = cochanges.iter().find(|c|
-            (c.file_a == "a.rs" && c.file_b == "b.rs") ||
-            (c.file_a == "b.rs" && c.file_b == "a.rs")
-        );
+        let ab = cochanges.iter().find(|c| {
+            (c.file_a == "a.rs" && c.file_b == "b.rs") || (c.file_a == "b.rs" && c.file_b == "a.rs")
+        });
         assert!(ab.is_some());
         assert_eq!(ab.unwrap().count, 5);
 
-        let ac = cochanges.iter().find(|c|
-            (c.file_a == "a.rs" && c.file_b == "c.rs") ||
-            (c.file_a == "c.rs" && c.file_b == "a.rs")
-        );
+        let ac = cochanges.iter().find(|c| {
+            (c.file_a == "a.rs" && c.file_b == "c.rs") || (c.file_a == "c.rs" && c.file_b == "a.rs")
+        });
         assert!(ac.is_some());
         assert_eq!(ac.unwrap().count, 1);
     }
@@ -136,14 +142,20 @@ mod tests {
         let cochanges = analyze_cochanges(&commits);
 
         // x+y (count=2) should have higher confidence than x+z (count=1)
-        let xy = cochanges.iter().find(|c|
-            (c.file_a == "x.rs" && c.file_b == "y.rs") ||
-            (c.file_a == "y.rs" && c.file_b == "x.rs")
-        ).unwrap();
-        let xz = cochanges.iter().find(|c|
-            (c.file_a == "x.rs" && c.file_b == "z.rs") ||
-            (c.file_a == "z.rs" && c.file_b == "x.rs")
-        ).unwrap();
+        let xy = cochanges
+            .iter()
+            .find(|c| {
+                (c.file_a == "x.rs" && c.file_b == "y.rs")
+                    || (c.file_a == "y.rs" && c.file_b == "x.rs")
+            })
+            .unwrap();
+        let xz = cochanges
+            .iter()
+            .find(|c| {
+                (c.file_a == "x.rs" && c.file_b == "z.rs")
+                    || (c.file_a == "z.rs" && c.file_b == "x.rs")
+            })
+            .unwrap();
 
         assert!(xy.confidence > xz.confidence);
     }

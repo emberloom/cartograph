@@ -126,8 +126,7 @@ fn parse_git_log_output(text: &str) -> Result<Vec<CommitInfo>> {
             };
 
             // For rename/copy, parts[2] is the new path; otherwise parts[1]
-            let path = if (status.starts_with('R') || status.starts_with('C')) && parts.len() >= 3
-            {
+            let path = if (status.starts_with('R') || status.starts_with('C')) && parts.len() >= 3 {
                 parts[2].to_string()
             } else if parts.len() >= 2 {
                 parts[1].to_string()

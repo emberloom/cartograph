@@ -1,2 +1,17 @@
 /target
 .cartograph/
+
+# Release artifacts
+dist/
+
+# Secrets / local config
+.env
+.env.*
+
+# macOS
+.DS_Store
+
+# IDE
+.idea/
+.vscode/
+*.iml

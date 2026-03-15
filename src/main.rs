@@ -37,13 +37,9 @@ enum Commands {
         depth: usize,
     },
     /// Show files that co-change with an entity
-    CoChanges {
-        entity: String,
-    },
+    CoChanges { entity: String },
     /// Show who owns an entity (git blame)
-    WhoOwns {
-        entity: String,
-    },
+    WhoOwns { entity: String },
     /// Show change hotspots
     Hotspots {
         /// Number of results

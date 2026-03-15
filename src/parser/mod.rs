@@ -1,5 +1,5 @@
 pub mod rust;
-pub use rust::{parse_rust_source, ParseResult, ParsedEntity};
+pub use rust::{ParseResult, ParsedEntity, parse_rust_source};
 
 use anyhow::Result;
 use std::path::Path;
@@ -103,11 +103,7 @@ pub fn index_repo(repo_path: &Path, store: &mut GraphStore) -> Result<()> {
 }
 
 /// Recursively collect all `.rs` files under `dir`, skipping `target/`.
-fn collect_rs_files(
-    _root: &Path,
-    dir: &Path,
-    out: &mut Vec<std::path::PathBuf>,
-) -> Result<()> {
+fn collect_rs_files(_root: &Path, dir: &Path, out: &mut Vec<std::path::PathBuf>) -> Result<()> {
     for entry in std::fs::read_dir(dir)? {
         let entry = entry?;
         let path = entry.path();
@@ -142,14 +138,30 @@ fn resolve_mod_paths(declaring_rel: &str, mod_name: &str) -> Vec<String> {
     if file_stem == "main" || file_stem == "lib" || file_stem == "mod" {
         // Sibling: src/foo.rs or src/foo/mod.rs
         vec![
-            parent.join(format!("{}.rs", mod_name)).to_string_lossy().to_string(),
-            parent.join(mod_name).join("mod.rs").to_string_lossy().to_string(),
+            parent
+                .join(format!("{}.rs", mod_name))
+                .to_string_lossy()
+                .to_string(),
+            parent
+                .join(mod_name)
+                .join("mod.rs")
+                .to_string_lossy()
+                .to_string(),
         ]
     } else {
         // Sub-module: src/bar/foo.rs or src/bar/foo/mod.rs
         vec![
-            parent.join(&file_stem).join(format!("{}.rs", mod_name)).to_string_lossy().to_string(),
-            parent.join(&file_stem).join(mod_name).join("mod.rs").to_string_lossy().to_string(),
+            parent
+                .join(&file_stem)
+                .join(format!("{}.rs", mod_name))
+                .to_string_lossy()
+                .to_string(),
+            parent
+                .join(&file_stem)
+                .join(mod_name)
+                .join("mod.rs")
+                .to_string_lossy()
+                .to_string(),
         ]
     }
 }

@@ -1,7 +1,7 @@
 pub mod tools;
 
 use anyhow::Result;
-use serde_json::{json, Value};
+use serde_json::{Value, json};
 use std::io::{BufRead, Write};
 
 use crate::store::graph::GraphStore;
@@ -29,7 +29,10 @@ pub fn run_mcp_server(store: GraphStore) -> Result<()> {
         }
 
         if line.len() > MAX_REQUEST_SIZE {
-            eprintln!("[cartograph] request too large ({} bytes), skipping", line.len());
+            eprintln!(
+                "[cartograph] request too large ({} bytes), skipping",
+                line.len()
+            );
             let error_response = json!({
                 "jsonrpc": "2.0",
                 "id": null,
@@ -62,10 +65,7 @@ pub fn run_mcp_server(store: GraphStore) -> Result<()> {
         };
 
         let id = request.get("id").cloned().unwrap_or(Value::Null);
-        let method = request
-            .get("method")
-            .and_then(|m| m.as_str())
-            .unwrap_or("");
+        let method = request.get("method").and_then(|m| m.as_str()).unwrap_or("");
 
         eprintln!("[cartograph] method={method} id={id}");
 
@@ -123,14 +123,8 @@ fn dispatch(store: &GraphStore, method: &str, id: &Value, request: &Value) -> Va
 
         "tools/call" => {
             let params = request.get("params").cloned().unwrap_or(json!({}));
-            let tool_name = params
-                .get("name")
-                .and_then(|n| n.as_str())
-                .unwrap_or("");
-            let arguments = params
-                .get("arguments")
-                .cloned()
-                .unwrap_or(json!({}));
+            let tool_name = params.get("name").and_then(|n| n.as_str()).unwrap_or("");
+            let arguments = params.get("arguments").cloned().unwrap_or(json!({}));
 
             eprintln!("[cartograph] tools/call tool={tool_name}");
 

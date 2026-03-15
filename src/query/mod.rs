@@ -53,7 +53,9 @@ mod tests {
 
         store.add_edge(&a, &b, EdgeKind::Imports, 1.0).unwrap();
         store.add_edge(&b, &c, EdgeKind::Imports, 1.0).unwrap();
-        store.add_edge(&a, &c, EdgeKind::CoChangesWith, 0.8).unwrap();
+        store
+            .add_edge(&a, &c, EdgeKind::CoChangesWith, 0.8)
+            .unwrap();
 
         // Add a person for ownership
         let person = store
@@ -69,9 +71,11 @@ mod tests {
         let store = setup_store();
         let results = blast_radius::query(&store, "src/a.rs", 3);
         assert!(!results.is_empty());
-        assert!(results
-            .iter()
-            .any(|r| r.entity_path.as_deref() == Some("src/b.rs")));
+        assert!(
+            results
+                .iter()
+                .any(|r| r.entity_path.as_deref() == Some("src/b.rs"))
+        );
     }
 
     #[test]
@@ -87,9 +91,11 @@ mod tests {
         let store = setup_store();
         let results = co_changes(&store, "src/a.rs");
         // a.rs has a CoChangesWith edge to c.rs
-        assert!(results
-            .iter()
-            .any(|r| r.entity_path.as_deref() == Some("src/c.rs")));
+        assert!(
+            results
+                .iter()
+                .any(|r| r.entity_path.as_deref() == Some("src/c.rs"))
+        );
     }
 
     #[test]

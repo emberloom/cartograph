@@ -1,8 +1,8 @@
 pub mod commits;
-pub use commits::{mine_commits, CommitInfo, FileChange, ChangeKind};
+pub use commits::{ChangeKind, CommitInfo, FileChange, mine_commits};
 
 pub mod cochange;
-pub use cochange::{analyze_cochanges, write_cochange_edges, CoChange};
+pub use cochange::{CoChange, analyze_cochanges, write_cochange_edges};
 
 pub mod ownership;
-pub use ownership::{who_owns, write_ownership_edges, OwnershipEntry};
+pub use ownership::{OwnershipEntry, who_owns, write_ownership_edges};

@@ -1,0 +1,51 @@
+name: release
+
+on:
+  push:
+    tags:
+      - "v*"
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: "Tag to publish (e.g. v0.1.1). Defaults to the current ref name."
+        required: false
+        default: ""
+
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Rust
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Cache cargo
+        uses: Swatinem/rust-cache@v2
+
+      - name: Build release binary
+        run: cargo build --release --bin cartograph
+
+      - name: Package artifacts
+        run: |
+          mkdir -p dist
+          cp target/release/cartograph dist/cartograph-linux-x86_64
+          tar -C dist -czf dist/cartograph-linux-x86_64.tar.gz cartograph-linux-x86_64
+          shasum -a 256 dist/cartograph-linux-x86_64.tar.gz > dist/cartograph-linux-x86_64.tar.gz.sha256
+          ls -lh dist
+
+      - name: Publish GitHub release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          TAG="${{ inputs.tag || github.ref_name }}"
+          FILES="dist/cartograph-linux-x86_64.tar.gz dist/cartograph-linux-x86_64.tar.gz.sha256"
+          if gh release view "$TAG" &>/dev/null; then
+            gh release upload "$TAG" $FILES --clobber
+          else
+            gh release create "$TAG" --generate-notes $FILES
+          fi

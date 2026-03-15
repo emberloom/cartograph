@@ -1,8 +1,8 @@
 use anyhow::Result;
 use serde_json::Value;
 
-use crate::store::graph::GraphStore;
 use crate::query;
+use crate::store::graph::GraphStore;
 
 pub struct ToolDef {
     pub name: &'static str,

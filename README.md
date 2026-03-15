@@ -1,17 +1,53 @@
-# Emberloom Cartograph
+<div align="center">
 
-**Codebase world model — maps, understands, and predicts complex software systems.**
+<h1>Emberloom Cartograph</h1>
 
-[![Rust](https://img.shields.io/badge/rust-stable-orange.svg)](https://www.rust-lang.org/)
-[![License](https://img.shields.io/badge/license-Apache--2.0-blue.svg)](LICENSE)
+<p><strong>Codebase world model — maps, understands, and predicts complex software systems.</strong></p>
+
+[![CI](https://github.com/emberloom/cartograph/actions/workflows/ci.yml/badge.svg)](https://github.com/emberloom/cartograph/actions/workflows/ci.yml)
+[![License: Apache 2.0](https://img.shields.io/badge/license-Apache--2.0-blue.svg)](LICENSE)
+[![Rust: stable](https://img.shields.io/badge/rust-stable-orange.svg)](https://www.rust-lang.org)
+[![Version](https://img.shields.io/github/v/tag/emberloom/cartograph?label=version&color=blue)](https://github.com/emberloom/cartograph/releases)
+[![Status](https://img.shields.io/badge/status-active%20development-yellow.svg)](CHANGELOG.md)
+
+</div>
 
 ---
 
-## What is Cartograph?
+> [!WARNING]
+> **Early development.** Cartograph is actively developed and internals may change between versions. Expect rough edges — bug reports and PRs are welcome.
 
-Cartograph builds a structural and historical model of any codebase. It parses source code into a dependency graph (Layer 1) and mines git history for co-change patterns and code ownership (Layer 2). The result is queryable via CLI or an MCP server.
+Cartograph builds a **structural and historical model of any codebase**. It parses source code into a dependency graph (Layer 1) and mines git history for co-change patterns and code ownership (Layer 2). The result is queryable via CLI or an MCP server.
 
 **Used by AI agents and humans to understand code before changing it.** Instead of loading entire codebases into context, agents call Cartograph to answer targeted questions: what does this file affect, who owns it, what tends to break together.
+
+> Cartograph is used by [Emberloom Sparks](https://github.com/emberloom/sparks) as its built-in codebase-understanding layer — agents query it before making changes to understand blast radius and ownership.
+
+---
+
+## Table of Contents
+
+- [What's New](#whats-new)
+- [Quick Start](#quick-start)
+- [MCP Setup](#mcp-setup-for-claude-code)
+- [Available Tools](#available-tools-mcp)
+- [Architecture](#architecture)
+- [v0.1.0 Scope](#v010-scope)
+- [Contributing](#contributing)
+- [License](#license)
+
+---
+
+## What's New
+
+First public release — see [CHANGELOG.md](CHANGELOG.md) for the full list:
+
+- **Dependency graph** — tree-sitter parses Rust source into a directed graph backed by petgraph and SQLite
+- **Git history mining** — co-change frequency and blame-based ownership from git2
+- **Blast radius traversal** — reachability query over the dependency graph
+- **MCP stdio server** — 5 tools exposed to Claude Code and any MCP-compatible client
+- **7-subcommand CLI** — `index`, `blast-radius`, `hotspots`, `co-changes`, `who-owns`, `deps`, `serve`
+- **29 passing tests** — unit + end-to-end coverage
 
 ---
 
@@ -72,6 +108,8 @@ Add this to your Claude Code MCP settings (`~/.claude/mcp_servers.json` or proje
 
 Cartograph will then be available as tools that Claude can call to understand your codebase. Run `index` once beforehand to build the database.
 
+[Emberloom Sparks](https://github.com/emberloom/sparks) uses Cartograph this way out of the box — if you're running Sparks, add `cartograph` to your MCP registry in `config.toml` to give your agents codebase-aware context.
+
 ---
 
 ## Available Tools (MCP)
@@ -130,10 +168,18 @@ Cartograph will then be available as tools that Claude can call to understand yo
 
 ---
 
+## Contributing
+
+See [CONTRIBUTING.md](CONTRIBUTING.md). In short: `cargo test`, `cargo clippy`, `cargo fmt --check` must all pass before submitting a PR.
+
+Questions and bug reports → [GitHub Issues](https://github.com/emberloom/cartograph/issues)
+
+---
+
 ## License
 
 Apache-2.0. See [LICENSE](LICENSE).
 
 ---
 
-Part of [Emberloom](https://github.com/emberloom).
+Part of [Emberloom](https://github.com/emberloom) · Built to work alongside [Emberloom Sparks](https://github.com/emberloom/sparks)

@@ -117,12 +117,9 @@ pub fn write_ownership_edges(store: &mut GraphStore, repo_path: &Path) -> Result
             // Find or create the Person entity; use email as the unique path key
             let person_id = match store.find_entity_by_path(&entry.email) {
                 Some(existing) => existing.id,
-                None => store.add_entity(
-                    EntityKind::Person,
-                    &entry.author,
-                    Some(&entry.email),
-                    None,
-                )?,
+                None => {
+                    store.add_entity(EntityKind::Person, &entry.author, Some(&entry.email), None)?
+                }
             };
 
             let confidence = entry.percentage / 100.0;
