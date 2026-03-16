@@ -11,6 +11,7 @@ const STORAGE_KEY = 'cartograph_tour_seen';
 let _hotspot = null;  // data.hotspots[0] enriched with x,y from fileNodes
 let _card = null;     // current tooltip DOM element
 let _step = 0;
+let _pendingTimer = null;
 const TOTAL_STEPS = 5;
 
 const STEPS = [
@@ -56,11 +57,18 @@ export function initTour(data) {
 
   // Auto-start on first visit
   if (!localStorage.getItem(STORAGE_KEY)) {
-    setTimeout(() => startTour(), 500);
+    _scheduleStep(() => startTour(), 500);
   }
 }
 
+function _scheduleStep(fn, delay) {
+  clearTimeout(_pendingTimer);
+  _pendingTimer = setTimeout(fn, delay);
+}
+
 export function startTour() {
+  clearTimeout(_pendingTimer);
+  _pendingTimer = null;
   _step = 0;
   _showStep(0);
 }
@@ -105,7 +113,7 @@ function _runStepAction(index, onReady) {
       flyTo(panX, panY, 4, 400, () => {
         window.dispatchEvent(new CustomEvent('navigate-to-node', { detail: { id: _hotspot.id } }));
         // Show card 400ms after navigate animation starts (ripple will be in progress)
-        setTimeout(onReady, 400);
+        _scheduleStep(onReady, 400);
       });
     } else {
       onReady();
@@ -116,10 +124,10 @@ function _runStepAction(index, onReady) {
   } else if (index === 3) {
     clearSelection();
     switchMode('risk');
-    setTimeout(onReady, 450); // wait for mode transition
+    _scheduleStep(onReady, 450); // wait for mode transition
   } else if (index === 4) {
     switchMode('ownership');
-    setTimeout(onReady, 450);
+    _scheduleStep(onReady, 450);
   }
 }
 
@@ -161,7 +169,7 @@ function _buildCard(index, spec) {
 
   card.querySelector('#tour-next').addEventListener('click', () => {
     _removeCard();
-    setTimeout(() => _showStep(index + 1), 150);
+    _scheduleStep(() => _showStep(index + 1), 150);
   });
   card.querySelector('#tour-skip').addEventListener('click', () => {
     _endTour();
@@ -178,6 +186,8 @@ function _removeCard() {
 }
 
 function _endTour() {
+  clearTimeout(_pendingTimer);
+  _pendingTimer = null;
   _removeCard();
   localStorage.setItem(STORAGE_KEY, '1');
 }
