@@ -2,7 +2,7 @@ import * as THREE from 'three';
 import { EffectComposer } from 'three/addons/postprocessing/EffectComposer.js';
 import { RenderPass } from 'three/addons/postprocessing/RenderPass.js';
 import { UnrealBloomPass } from 'three/addons/postprocessing/UnrealBloomPass.js';
-import { BG_COLOR, dirColor } from './colors.js';
+import { BG_COLOR } from './colors.js';
 
 export let scene, camera, renderer, composer;
 export let dirty = true;
@@ -28,7 +28,10 @@ export function initRenderer(container, bounds) {
   // Treemap coords: x=[0,W], y=[0,H]. We flip Y in geometry (y → -y),
   // so the visible range is x=[0,W], y=[-H,0].
   const aspect = W / H;
-  const viewH = bounds.h * 1.05; // slight padding
+  // Fit to whichever dimension is constraining so the entire treemap is visible
+  const viewH = aspect >= 1
+    ? bounds.h * 1.05
+    : (bounds.w / aspect) * 1.05;
   const viewW = viewH * aspect;
   const cx = bounds.w / 2;
   const cy = -bounds.h / 2; // center of flipped Y range
@@ -67,7 +70,9 @@ export function initRenderer(container, bounds) {
     renderer.setSize(w, h);
     composer.setSize(w, h);
     const newAspect = w / h;
-    const newViewH = bounds.h * 1.05;
+    const newViewH = newAspect >= 1
+      ? bounds.h * 1.05
+      : (bounds.w / newAspect) * 1.05;
     const newViewW = newViewH * newAspect;
     const cx = bounds.w / 2;
     const cy = -bounds.h / 2;
@@ -169,9 +174,10 @@ export function addRegions(regions) {
         scale * 4,
         1,
       );
+      const spriteH = scale * 4;
       sprite.position.set(
         r.x0 + w * 0.02 + sprite.scale.x / 2,
-        -(r.y0 + 10),
+        -(r.y0 + 10) - spriteH / 2,
         0.5,
       );
       scene.add(sprite);
