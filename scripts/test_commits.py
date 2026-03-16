@@ -6,45 +6,7 @@ import os
 import sys
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
-from collections import defaultdict
-
-# Inline the function-under-test so we can test it in isolation
-from datetime import datetime, timezone
-
-def build_commits(files_sorted, file_idx, cochange_edges):
-    """Build temporal commits data for the time scrubber."""
-    from datetime import datetime, timezone
-    file_months = defaultdict(set)
-
-    for e in cochange_edges:
-        ts_str = e["last_evidence"] if hasattr(e, "__getitem__") else e.get("last_evidence")
-        if not ts_str:
-            continue
-        try:
-            dt = datetime.fromisoformat(ts_str.replace(" ", "T")).replace(tzinfo=timezone.utc)
-        except (ValueError, AttributeError):
-            continue
-        month_dt = datetime(dt.year, dt.month, 1, tzinfo=timezone.utc)
-        month_ts = int(month_dt.timestamp())
-        for fid_key in ("from_id", "to_id"):
-            fid = e[fid_key] if hasattr(e, "__getitem__") else e.get(fid_key)
-            if fid in file_idx:
-                file_months[file_idx[fid]].add(month_ts)
-
-    if not file_months:
-        return None
-
-    all_months = sorted(set(ts for months in file_months.values() for ts in months))
-    buckets = []
-    for month_ts in all_months:
-        files_in_month = sorted(idx for idx, months in file_months.items() if month_ts in months)
-        if files_in_month:
-            buckets.append({"t": month_ts, "files": files_in_month})
-
-    if not buckets:
-        return None
-
-    return {"first": all_months[0], "last": all_months[-1], "buckets": buckets}
+from scripts.viz import build_commits
 
 
 # Tests
