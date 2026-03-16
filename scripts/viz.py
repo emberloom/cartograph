@@ -29,7 +29,7 @@ def load_entities_and_edges(db_path: str, cochange_threshold: float):
     ).fetchall()
 
     all_edges = conn.execute(
-        "SELECT from_id, to_id, kind, confidence FROM edges"
+        "SELECT from_id, to_id, kind, confidence, last_evidence FROM edges"
     ).fetchall()
 
     file_ids = {r["id"] for r in files}
@@ -127,6 +127,60 @@ def blast_radius_bfs(file_id, adj, depth=3):
         frontier = next_f
     visited.discard(file_id)
     return visited
+
+
+def build_commits(files_sorted, file_idx, cochange_edges):
+    """Build temporal commits data for the time scrubber.
+
+    Groups co-change edge last_evidence timestamps by calendar month,
+    producing a list of {t, files} buckets for the JS scrubber.
+    """
+    from datetime import datetime, timezone
+
+    file_months = defaultdict(set)  # contiguous_idx -> set of month timestamps
+
+    for e in cochange_edges:
+        ts_str = e["last_evidence"]
+        if not ts_str:
+            continue
+        try:
+            # SQLite stores as "YYYY-MM-DD HH:MM:SS"
+            dt = datetime.fromisoformat(
+                ts_str.replace(" ", "T")
+            ).replace(tzinfo=timezone.utc)
+        except (ValueError, AttributeError):
+            continue
+        # First day of month, UTC, as unix timestamp
+        month_dt = datetime(dt.year, dt.month, 1, tzinfo=timezone.utc)
+        month_ts = int(month_dt.timestamp())
+        for fid in (e["from_id"], e["to_id"]):
+            if fid in file_idx:
+                file_months[file_idx[fid]].add(month_ts)
+
+    if not file_months:
+        return None
+
+    all_months = sorted(
+        set(ts for months in file_months.values() for ts in months)
+    )
+
+    buckets = []
+    for month_ts in all_months:
+        files_in_month = sorted(
+            idx for idx, months in file_months.items()
+            if month_ts in months
+        )
+        if files_in_month:
+            buckets.append({"t": month_ts, "files": files_in_month})
+
+    if not buckets:
+        return None
+
+    return {
+        "first": all_months[0],
+        "last": all_months[-1],
+        "buckets": buckets,
+    }
 
 
 def build_data(files, struct_edges, cochange_edges, owner_of,
@@ -265,6 +319,9 @@ def build_data(files, struct_edges, cochange_edges, owner_of,
 
     total_cochange = len(seen)
 
+    # Temporal commits data for time scrubber (Phase 2)
+    commits = build_commits(files_sorted, file_idx, cochange_edges)
+
     data = {
         "repo": repo_name,
         "stats": {
@@ -282,6 +339,7 @@ def build_data(files, struct_edges, cochange_edges, owner_of,
         "struct_edges": struct_edge_pairs,
         "cochange_by_node": cochange_by_node_str,
         "hotspots": hotspots,
+        "commits": commits,
     }
 
     return data
