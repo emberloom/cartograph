@@ -65,7 +65,7 @@ export function switchMode(mode) {
     mode === 'risk' ? 'block' : 'none';
   const legendOwnership = document.getElementById('legend-ownership');
   if (legendOwnership) {
-    legendOwnership.style.display = mode === 'ownership' ? 'block' : 'none';
+    legendOwnership.style.display = mode === 'ownership' ? 'flex' : 'none';
   }
 
   // Notify ui.js to refresh ownership legend content
