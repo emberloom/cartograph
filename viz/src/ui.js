@@ -3,6 +3,15 @@ import { clearSelection } from './interaction.js';
 import { fileNodes } from './layout.js';
 import { dirColor } from './colors.js';
 
+/** Escape HTML special characters to prevent XSS from repo data. */
+function esc(str) {
+  return String(str)
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;');
+}
+
 /**
  * Initialize all DOM UI panels.
  * @param {Object} data - full data.json
@@ -21,15 +30,15 @@ export function initUI(data, topDirs) {
     ">
       <div style="padding:14px 16px 10px; border-bottom:1px solid #21262d">
         <div style="font-size:15px; font-weight:700; color:#58a6ff">Cartograph</div>
-        <div style="color:#8b949e; font-size:11px">${data.repo}</div>
+        <div style="color:#8b949e; font-size:11px">${esc(data.repo)}</div>
       </div>
       <div style="padding:12px 16px; border-bottom:1px solid #21262d">
         <div style="font-size:10px; text-transform:uppercase; letter-spacing:0.8px; color:#6e7681; margin-bottom:8px">Stats</div>
-        <div style="display:flex; justify-content:space-between; margin-bottom:4px"><span style="color:#8b949e">Files</span><span style="font-weight:600">${data.stats.files}${data.stats.total_files > data.stats.files ? ' / ' + data.stats.total_files : ''}</span></div>
-        <div style="display:flex; justify-content:space-between; margin-bottom:4px"><span style="color:#8b949e">Directories</span><span style="font-weight:600">${data.stats.directories}</span></div>
-        <div style="display:flex; justify-content:space-between; margin-bottom:4px"><span style="color:#8b949e">Import edges</span><span style="font-weight:600">${data.stats.struct_edges}</span></div>
-        <div style="display:flex; justify-content:space-between; margin-bottom:4px"><span style="color:#8b949e">Co-change pairs</span><span style="font-weight:600">${data.stats.cochange_edges}</span></div>
-      <div style="display:flex; justify-content:space-between; margin-bottom:4px"><span style="color:#8b949e">Owners</span><span style="font-weight:600">${data.stats.owners || '—'}</span></div>
+        <div style="display:flex; justify-content:space-between; margin-bottom:4px"><span style="color:#8b949e">Files</span><span style="font-weight:600">${esc(data.stats.files)}${data.stats.total_files > data.stats.files ? ' / ' + esc(data.stats.total_files) : ''}</span></div>
+        <div style="display:flex; justify-content:space-between; margin-bottom:4px"><span style="color:#8b949e">Directories</span><span style="font-weight:600">${esc(data.stats.directories)}</span></div>
+        <div style="display:flex; justify-content:space-between; margin-bottom:4px"><span style="color:#8b949e">Import edges</span><span style="font-weight:600">${esc(data.stats.struct_edges)}</span></div>
+        <div style="display:flex; justify-content:space-between; margin-bottom:4px"><span style="color:#8b949e">Co-change pairs</span><span style="font-weight:600">${esc(data.stats.cochange_edges)}</span></div>
+      <div style="display:flex; justify-content:space-between; margin-bottom:4px"><span style="color:#8b949e">Owners</span><span style="font-weight:600">${data.stats.owners ? esc(data.stats.owners) : '—'}</span></div>
       </div>
       <div style="padding:12px 16px; border-bottom:1px solid #21262d">
         <div style="font-size:10px; text-transform:uppercase; letter-spacing:0.8px; color:#6e7681; margin-bottom:8px">Top Hotspots</div>
@@ -139,7 +148,7 @@ export function initUI(data, topDirs) {
     const color = fn ? dirColor(fn.topLevelDirIdx) : '#58a6ff';
     div.innerHTML = `
       <div style="width:8px;height:8px;border-radius:50%;background:${color};flex-shrink:0"></div>
-      <span style="flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="${h.path}">${h.label}</span>
+      <span style="flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="${esc(h.path)}">${esc(h.label)}</span>
       <span style="color:#6e7681">${h.degree}</span>
     `;
     div.onclick = () => {
@@ -155,7 +164,7 @@ export function initUI(data, topDirs) {
     row.style.cssText = 'display:flex; align-items:center; gap:8px;';
     row.innerHTML = `
       <div style="width:10px;height:10px;border-radius:50%;background:${dirColor(i)};flex-shrink:0"></div>
-      <span style="color:#8b949e">${topDirs[i]}</span>
+      <span style="color:#8b949e">${esc(topDirs[i])}</span>
     `;
     legendArch.appendChild(row);
   }
@@ -205,7 +214,7 @@ export function initUI(data, topDirs) {
       <div class="search-item" data-id="${fn.id}" style="
         padding:6px 12px; cursor:pointer; color:#e6edf3;
         border-bottom:1px solid #21262d; font-size:11px;
-      ">${fn.path}</div>
+      ">${esc(fn.path)}</div>
     `).join('');
     searchResults.style.display = 'block';
 
@@ -236,9 +245,9 @@ export function initUI(data, topDirs) {
     panel.style.display = 'block';
     document.getElementById('sel-name').textContent = node.name;
     document.getElementById('sel-details').innerHTML = `
-      <div style="display:flex;gap:8px;margin-bottom:4px"><span style="color:#6e7681;width:80px">Path</span><span style="word-break:break-all">${node.path}</span></div>
-      <div style="display:flex;gap:8px;margin-bottom:4px"><span style="color:#6e7681;width:80px">Directory</span><span>${node.topLevelDir}</span></div>
-      <div style="display:flex;gap:8px;margin-bottom:4px"><span style="color:#6e7681;width:80px">Owner</span><span>${node.owner}</span></div>
+      <div style="display:flex;gap:8px;margin-bottom:4px"><span style="color:#6e7681;width:80px">Path</span><span style="word-break:break-all">${esc(node.path)}</span></div>
+      <div style="display:flex;gap:8px;margin-bottom:4px"><span style="color:#6e7681;width:80px">Directory</span><span>${esc(node.topLevelDir)}</span></div>
+      <div style="display:flex;gap:8px;margin-bottom:4px"><span style="color:#6e7681;width:80px">Owner</span><span>${esc(node.owner)}</span></div>
       <div style="display:flex;gap:8px;margin-bottom:4px"><span style="color:#6e7681;width:80px">Connections</span><span>${node.degree}</span></div>
       <div style="display:flex;gap:8px;margin-bottom:4px"><span style="color:#6e7681;width:80px">Risk score</span><span>${Math.round(node.riskScore * 100)}%</span></div>
       <div style="display:flex;gap:8px;margin-bottom:4px"><span style="color:#6e7681;width:80px">Blast radius</span><span>${blastCount} files</span></div>
@@ -252,7 +261,7 @@ export function initUI(data, topDirs) {
       ccList.innerHTML = cochanges.slice(0, 6).map(cc => {
         const other = nodeById[cc.t];
         const label = other ? other.name : `#${cc.t}`;
-        return `<div style="display:flex;justify-content:space-between;padding:3px 0;color:#e3b341;font-size:11px;border-bottom:1px solid #21262d"><span>${label}</span><span>${Math.round(cc.c * 100)}%</span></div>`;
+        return `<div style="display:flex;justify-content:space-between;padding:3px 0;color:#e3b341;font-size:11px;border-bottom:1px solid #21262d"><span>${esc(label)}</span><span>${Math.round(cc.c * 100)}%</span></div>`;
       }).join('');
     } else {
       ccPanel.style.display = 'none';
