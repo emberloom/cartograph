@@ -9,6 +9,7 @@ import { setEdgeOpacity, getEdgeMesh } from './edges.js';
 let selectedNode = null;
 let currentMode = 'architecture';
 let structAdj = {};
+let _blastCounts = []; // number[], indexed by node id (contiguous 0..N-1)
 let cochangeByNode = {};
 let showCochange = false;
 
@@ -45,6 +46,24 @@ export function initInteraction(data) {
     if (!structAdj[t]) structAdj[t] = [];
     structAdj[s].push(t);
     structAdj[t].push(s);
+  }
+
+  // Pre-compute 3-hop reachable count for every node (used by connectivity filter).
+  // Safe: fn.id === index in fileNodes (contiguous 0..N-1 invariant from layout.js).
+  _blastCounts = new Array(fileNodes.length).fill(0);
+  for (const fn of fileNodes) {
+    let frontier = [fn.id];
+    const visited = new Set([fn.id]);
+    for (let depth = 1; depth <= 3; depth++) {
+      const next = [];
+      for (const n of frontier) {
+        for (const nb of structAdj[n] || []) {
+          if (!visited.has(nb)) { visited.add(nb); next.push(nb); }
+        }
+      }
+      frontier = next;
+    }
+    _blastCounts[fn.id] = visited.size - 1; // exclude self
   }
 
   // Store initial camera bounds
@@ -365,4 +384,8 @@ export function setMode(mode) {
 
 export function getSelectedNode() {
   return selectedNode;
+}
+
+export function getBlastCounts() {
+  return _blastCounts;
 }
