@@ -62,7 +62,7 @@ export function switchMode(mode) {
   document.getElementById('legend-arch').style.display =
     mode === 'architecture' ? 'block' : 'none';
   document.getElementById('legend-risk').style.display =
-    mode === 'risk' ? 'block' : 'none';
+    mode === 'risk' ? 'flex' : 'none';
   const legendOwnership = document.getElementById('legend-ownership');
   if (legendOwnership) {
     legendOwnership.style.display = mode === 'ownership' ? 'flex' : 'none';

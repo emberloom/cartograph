@@ -43,7 +43,7 @@ export function initUI(data, topDirs) {
         <div style="display:flex; justify-content:space-between; margin-bottom:4px"><span style="color:#8b949e">Co-change pairs</span><span style="font-weight:600">${esc(data.stats.cochange_edges)}</span></div>
       <div style="display:flex; justify-content:space-between; margin-bottom:4px"><span style="color:#8b949e">Owners</span><span style="font-weight:600">${data.stats.owners ? esc(data.stats.owners) : '—'}</span></div>
       </div>
-      <div style="padding:8px 16px; border-bottom:1px solid #21262d">
+      <div id="filter-chips-section" style="display:none; padding:8px 16px; border-bottom:1px solid #21262d">
         <div id="filter-chips" style="display:flex; flex-direction:column; gap:4px;"></div>
       </div>
       <div style="padding:12px 16px; border-bottom:1px solid #21262d">

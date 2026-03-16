@@ -91,6 +91,14 @@ function _updateAllUI() {
   // Risk slider thumb position
   const riskSlider = document.getElementById('risk-filter-slider');
   if (riskSlider) riskSlider.value = _riskMin !== null ? _riskMin : 0;
+
+  // Show/hide chip section container
+  const chipSection = document.getElementById('filter-chips-section');
+  if (chipSection) {
+    const anyChip = _ownerFilter !== null || _riskMin !== null ||
+      _degreeMin !== null || _reachableMin !== null;
+    chipSection.style.display = anyChip ? 'block' : 'none';
+  }
 }
 
 function _setChip(chipId, labelId, text) {
