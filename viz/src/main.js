@@ -1,6 +1,7 @@
 import { loadData } from './data.js';
 import { computeLayout } from './layout.js';
 import { initRenderer, addRegions, markDirty } from './renderer.js';
+import { createNodes } from './nodes.js';
 
 async function init() {
   const status = document.getElementById('load-status');
@@ -18,6 +19,9 @@ async function init() {
 
   status.textContent = 'Drawing regions...';
   addRegions(layout.regions);
+
+  status.textContent = 'Drawing nodes...';
+  createNodes(layout.fileNodes);
 
   // Dismiss loading overlay
   const overlay = document.getElementById('loading-overlay');
