@@ -5,6 +5,7 @@ import { createNodes } from './nodes.js';
 import { createEdges } from './edges.js';
 import { initInteraction } from './interaction.js';
 import { initUI } from './ui.js';
+import { initScrubber } from './scrubber.js';
 
 async function init() {
   const status = document.getElementById('load-status');
@@ -37,6 +38,10 @@ async function init() {
 
   status.textContent = 'Building UI...';
   initUI(data, topDirs);
+
+  // Time scrubber
+  const scrubberEl = document.getElementById('scrubber-container');
+  if (scrubberEl) initScrubber(data.commits || null, scrubberEl);
 
   // Dismiss loading overlay
   const overlay = document.getElementById('loading-overlay');

@@ -326,4 +326,9 @@ export function initUI(data, topDirs) {
   window.addEventListener('node-deselected', () => {
     document.getElementById('selected-panel').style.display = 'none';
   });
+
+  // ── Scrubber container (populated by initScrubber in main.js) ──
+  const scrubberContainer = document.createElement('div');
+  scrubberContainer.id = 'scrubber-container';
+  document.body.appendChild(scrubberContainer);
 }
