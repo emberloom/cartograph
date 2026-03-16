@@ -41,6 +41,9 @@ function nodeRadius(degree) {
  * @param {Array} fileNodes - from layout.js
  */
 export function createNodes(fileNodes) {
+  // INVARIANT: fileNodes must be sorted by id with ids 0..N-1 (contiguous).
+  // All ripple/pulse hot paths use fileNodesRef[id] as a direct O(1) index.
+  // layout.js guarantees this; do not call createNodes with reindexed data.
   fileNodesRef = fileNodes;
   nodeCount = fileNodes.length;
 

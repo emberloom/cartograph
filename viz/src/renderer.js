@@ -127,7 +127,7 @@ export function initRenderer(container, bounds) {
     _lastFrameTime = now;
 
     if (_animSubs > 0) {
-      for (const cb of _tickCbs) cb(dt);
+      for (const cb of [..._tickCbs]) cb(dt);
       composer.render();
     } else if (dirty) {
       composer.render();

@@ -27,6 +27,9 @@ let _arcIdx = null;  // which arc this particle belongs to
 // Pre-sampled arc point arrays: _arcPoints[arcIdx] = THREE.Vector3[]
 let _arcPoints = [];
 
+// Confidence values parallel to _arcPoints: _arcConfs[arcIdx] = number 0..1
+let _arcConfs = [];
+
 // Base colors per arc (RGB of co-change partner node color)
 let _arcBaseColors = [];
 
@@ -109,6 +112,7 @@ export function initParticles(nodeId, cochangeData, fileNodes) {
   const srcWorldPos = { x: srcPos.x, y: -srcPos.y };
 
   _arcPoints = [];
+  _arcConfs = [];
   _arcBaseColors = [];
 
   for (let a = 0; a < partners.length; a++) {
@@ -132,6 +136,7 @@ export function initParticles(nodeId, cochangeData, fileNodes) {
     }
 
     _arcPoints.push(computeArcPoints(srcWorldPos, tgtWorldPos, centroidA, centroidB, 16));
+    _arcConfs.push(conf ?? 0.5);
 
     // Base color: architecture palette color of the co-change partner
     const fn = fileNodes.find(f => f.id === tgtId);
@@ -149,7 +154,7 @@ export function initParticles(nodeId, cochangeData, fileNodes) {
   _arcIdx = new Int32Array(total);
 
   for (let a = 0; a < arcCount; a++) {
-    const conf = partners[a]?.c ?? 0.5;
+    const conf = _arcConfs[a] ?? 0.5;
     const speed = 0.15 + conf * 0.35;
     for (let p = 0; p < PARTICLES_PER_ARC; p++) {
       const i = a * PARTICLES_PER_ARC + p;
@@ -192,6 +197,7 @@ export function clearParticles() {
   unregisterTickCallback(_tick);
   stopContinuousAnimation();
   _arcPoints = [];
+  _arcConfs = [];
   _arcBaseColors = [];
   _t = null;
   _speed = null;
