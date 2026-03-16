@@ -3,8 +3,9 @@ import { computeLayout, fileNodes } from './layout.js';
 import { initRenderer, addRegions, markDirty } from './renderer.js';
 import { createNodes } from './nodes.js';
 import { createEdges } from './edges.js';
-import { initInteraction } from './interaction.js';
+import { initInteraction, getBlastCounts } from './interaction.js';
 import { initUI } from './ui.js';
+import { initFilters } from './filters.js';
 import { initScrubber } from './scrubber.js';
 import { initTour } from './tour.js';
 
@@ -39,6 +40,20 @@ async function init() {
 
   status.textContent = 'Building UI...';
   initUI(data, topDirs);
+
+  // 3. initFilters stores blast counts (no DOM access at this point)
+  initFilters(getBlastCounts());
+
+  // 4. Set slider max values from actual data — must come after initUI (sliders exist).
+  //    Use reduce to avoid call stack limit on large arrays.
+  //    Math.max(..., 1) ensures sliders are never collapsed to zero-range on degenerate data.
+  const blastCounts = getBlastCounts();
+  const maxDegree = Math.max(fileNodes.reduce((m, fn) => Math.max(m, fn.degree), 0), 1);
+  const maxReachable = Math.max(blastCounts.reduce((m, v) => Math.max(m, v), 0), 1);
+  const degSlider = document.getElementById('degree-slider');
+  const reachSlider = document.getElementById('reachable-slider');
+  if (degSlider) degSlider.max = maxDegree;
+  if (reachSlider) reachSlider.max = maxReachable;
 
   // Time scrubber
   const scrubberEl = document.getElementById('scrubber-container');
