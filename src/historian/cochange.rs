@@ -4,21 +4,22 @@ use anyhow::Result;
 
 use crate::historian::commits::CommitInfo;
 use crate::store::graph::GraphStore;
-use crate::store::schema::EdgeKind;
 
 #[derive(Debug, Clone)]
 pub struct CoChange {
     pub file_a: String,
     pub file_b: String,
     pub count: u32,
-    pub confidence: f64, // 0.0 - 1.0
+    pub confidence: f64,      // 0.0 - 1.0
+    pub last_commit_ts: i64,  // unix timestamp of the most recent commit that included this pair
 }
 
 /// Analyze co-change relationships from a list of commits.
 /// Returns pairs of files that changed together, sorted by count descending.
 /// Confidence is normalized so the most co-changed pair has confidence 1.0.
 pub fn analyze_cochanges(commits: &[CommitInfo]) -> Vec<CoChange> {
-    let mut pair_counts: HashMap<(String, String), u32> = HashMap::new();
+    // Track (count, last_commit_ts) per pair
+    let mut pair_data: HashMap<(String, String), (u32, i64)> = HashMap::new();
 
     for commit in commits {
         let paths: Vec<&str> = commit
@@ -35,24 +36,29 @@ pub fn analyze_cochanges(commits: &[CommitInfo]) -> Vec<CoChange> {
                 } else {
                     (paths[j].to_string(), paths[i].to_string())
                 };
-                *pair_counts.entry((a, b)).or_insert(0) += 1;
+                let entry = pair_data.entry((a, b)).or_insert((0, commit.timestamp));
+                entry.0 += 1;
+                if commit.timestamp > entry.1 {
+                    entry.1 = commit.timestamp;
+                }
             }
         }
     }
 
-    if pair_counts.is_empty() {
+    if pair_data.is_empty() {
         return Vec::new();
     }
 
-    let max_count = *pair_counts.values().max().unwrap_or(&1) as f64;
+    let max_count = pair_data.values().map(|(c, _)| *c).max().unwrap_or(1) as f64;
 
-    let mut result: Vec<CoChange> = pair_counts
+    let mut result: Vec<CoChange> = pair_data
         .into_iter()
-        .map(|((file_a, file_b), count)| CoChange {
+        .map(|((file_a, file_b), (count, last_commit_ts))| CoChange {
             file_a,
             file_b,
             confidence: count as f64 / max_count,
             count,
+            last_commit_ts,
         })
         .collect();
 
@@ -72,11 +78,11 @@ pub fn write_cochange_edges(store: &mut GraphStore, cochanges: &[CoChange]) -> R
             Some(e) => e,
             None => continue,
         };
-        store.add_edge(
+        store.add_cochange_edge(
             &entity_a.id,
             &entity_b.id,
-            EdgeKind::CoChangesWith,
             cc.confidence,
+            cc.last_commit_ts,
         )?;
     }
     Ok(())

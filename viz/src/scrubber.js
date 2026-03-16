@@ -28,6 +28,11 @@ export function initScrubber(commits, container) {
     container.style.display = 'none';
     return;
   }
+  // Single timestamp → no temporal range to scrub; hide the bar
+  if (commits.first === commits.last) {
+    container.style.display = 'none';
+    return;
+  }
 
   _commits = commits;
   _container = container;

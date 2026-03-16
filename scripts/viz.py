@@ -353,8 +353,8 @@ def main():
     parser.add_argument("--repo-name", required=True, help="Repository display name")
     parser.add_argument("--out", required=True, help="Output data.json path")
     parser.add_argument(
-        "--cochange-threshold", type=float, default=0.25,
-        help="Minimum co-change confidence (default: 0.25)",
+        "--cochange-threshold", type=float, default=0.10,
+        help="Minimum co-change confidence (default: 0.10)",
     )
     parser.add_argument(
         "--max-nodes", type=int, default=0,

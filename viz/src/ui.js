@@ -403,6 +403,9 @@ export function initUI(data, topDirs) {
       searchResults.style.display = 'none';
       searchInput.value = '';
       searchInput.blur();
+    } else if (e.key === 'Enter') {
+      const first = searchResults.querySelector('.search-item');
+      if (first) first.click();
     }
   });
 
