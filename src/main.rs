@@ -20,7 +20,11 @@ struct Cli {
 #[derive(Subcommand)]
 enum Commands {
     /// Index a repository (parse structure + mine git history)
-    Index,
+    Index {
+        /// Maximum number of commits to mine for co-change and ownership data (0 = no limit)
+        #[arg(long, default_value = "50000")]
+        max_commits: usize,
+    },
     /// Query the dependency graph
     Deps {
         /// Entity to query (file path or module name)
@@ -74,7 +78,7 @@ fn main() -> anyhow::Result<()> {
     store::schema::init_db(&conn)?;
 
     match cli.command {
-        Commands::Index => {
+        Commands::Index { max_commits } => {
             let repo_path = std::path::Path::new(&cli.repo).canonicalize()?;
             let mut store = store::graph::GraphStore::new(conn)?;
 
@@ -92,7 +96,8 @@ fn main() -> anyhow::Result<()> {
             }
 
             // Layer 2: Dynamics
-            match historian::mine_commits(&repo_path, None) {
+            let commit_limit = if max_commits == 0 { None } else { Some(max_commits) };
+            match historian::mine_commits(&repo_path, commit_limit) {
                 Ok(commits) => {
                     println!("  Git history: {} commits", commits.len());
 

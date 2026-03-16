@@ -38,8 +38,9 @@ pub fn mine_commits(repo_path: &Path, limit: Option<usize>) -> Result<Vec<Commit
     // 1. Get commit list with metadata via --format
     // 2. Get file changes via --name-status in the same run using a record separator
 
-    // Cap commit limit to prevent memory exhaustion on large repos
-    const MAX_COMMITS: usize = 10_000;
+    // Cap commit limit to prevent memory exhaustion on very large repos.
+    // The caller (main.rs index command) controls this via --max-commits.
+    const MAX_COMMITS: usize = 100_000;
     let effective_limit = limit.map(|n| n.min(MAX_COMMITS)).unwrap_or(MAX_COMMITS);
 
     let output = Command::new("git")
