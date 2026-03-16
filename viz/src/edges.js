@@ -5,6 +5,28 @@ import { filePositions, fileNodes, regions } from './layout.js';
 let edgeMesh = null;
 
 /**
+ * Compute world-space points along an arc between two positions.
+ * Cross-module arcs: cubic Bezier through centroidA → centroidB.
+ * Same-module arcs: pass centroidA = centroidB = midpoint(p0, p1) for a straight line.
+ *
+ * @param {{x:number,y:number}} p0 - source position (Three.js world space, Y already flipped)
+ * @param {{x:number,y:number}} p1 - target position
+ * @param {{x:number,y:number}} centroidA - source region centroid
+ * @param {{x:number,y:number}} centroidB - target region centroid
+ * @param {number} segments - number of segments (returns segments+1 points)
+ * @returns {THREE.Vector3[]}
+ */
+export function computeArcPoints(p0, p1, centroidA, centroidB, segments) {
+  const curve = new THREE.CubicBezierCurve3(
+    new THREE.Vector3(p0.x, p0.y, 0),
+    new THREE.Vector3(centroidA.x, centroidA.y, 0),
+    new THREE.Vector3(centroidB.x, centroidB.y, 0),
+    new THREE.Vector3(p1.x, p1.y, 0),
+  );
+  return curve.getPoints(segments);
+}
+
+/**
  * Build and add structural edges to the scene.
  * Cross-module edges use cubic Bezier bundling through region centroids.
  * Same-module edges are straight lines.
