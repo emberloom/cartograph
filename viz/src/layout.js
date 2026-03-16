@@ -37,13 +37,22 @@ export function computeLayout(tree) {
   filePositions = new Map();
 
   root.each(node => {
+    if (node.depth === 0) return; // skip root node
+
     // Determine top-level directory
     let topDir = '';
     let topIdx = 0;
     const ancestors = node.ancestors().reverse();
     if (ancestors.length >= 2) {
-      topDir = ancestors[1].data.name;
-      topIdx = topDirIdx[topDir] ?? 0;
+      const topAncestorName = ancestors[1].data.name;
+      if (topDirIdx[topAncestorName] !== undefined) {
+        topDir = topAncestorName;
+        topIdx = topDirIdx[topAncestorName];
+      } else {
+        // Root-level file (no containing directory) — use a stable index beyond dirs
+        topDir = '';
+        topIdx = topLevelDirs.length; // wraps to a neutral color via dirColor
+      }
     }
 
     if (node.children) {

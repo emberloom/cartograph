@@ -10,10 +10,6 @@ async function init() {
 
   status.textContent = 'Computing layout...';
   const layout = computeLayout(data.tree);
-  console.log(`Layout: ${layout.fileNodes.length} files, ${layout.regions.length} regions`);
-  console.log(`Sample file:`, layout.fileNodes[0]);
-  console.log(`Sample region:`, layout.regions[0]);
-
   status.textContent = 'Ready.';
 }
 
