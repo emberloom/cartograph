@@ -3,6 +3,8 @@ import { clearSelection } from './interaction.js';
 import { startTour } from './tour.js';
 import { fileNodes } from './layout.js';
 import { dirColor, ownerColor } from './colors.js';
+import { setOwnerFilter, setRiskFilter, setDegreeFilter, setReachableFilter,
+         getOwnerFilter, getRiskMin, RISK_BANDS } from './filters.js';
 
 /** Escape HTML special characters to prevent XSS from repo data. */
 function esc(str) {
@@ -41,9 +43,31 @@ export function initUI(data, topDirs) {
         <div style="display:flex; justify-content:space-between; margin-bottom:4px"><span style="color:#8b949e">Co-change pairs</span><span style="font-weight:600">${esc(data.stats.cochange_edges)}</span></div>
       <div style="display:flex; justify-content:space-between; margin-bottom:4px"><span style="color:#8b949e">Owners</span><span style="font-weight:600">${data.stats.owners ? esc(data.stats.owners) : '—'}</span></div>
       </div>
+      <div style="padding:8px 16px; border-bottom:1px solid #21262d">
+        <div id="filter-chips" style="display:flex; flex-direction:column; gap:4px;"></div>
+      </div>
       <div style="padding:12px 16px; border-bottom:1px solid #21262d">
         <div style="font-size:10px; text-transform:uppercase; letter-spacing:0.8px; color:#6e7681; margin-bottom:8px">Top Hotspots</div>
         <div id="hotspot-list"></div>
+      </div>
+      <div style="padding:8px 16px; border-top:1px solid #21262d;">
+        <div style="color:#6e7681;font-size:10px;margin-bottom:6px;text-transform:uppercase;letter-spacing:0.05em">Connectivity</div>
+        <div style="display:flex;flex-direction:column;gap:6px;">
+          <div>
+            <div style="display:flex;justify-content:space-between;color:#8b949e;font-size:10px;margin-bottom:2px;">
+              <span>Degree</span><span id="degree-readout">≥ 0</span>
+            </div>
+            <input id="degree-slider" type="range" min="0" max="57" step="1" value="0"
+              style="width:100%;accent-color:#58a6ff;cursor:pointer;">
+          </div>
+          <div>
+            <div style="display:flex;justify-content:space-between;color:#8b949e;font-size:10px;margin-bottom:2px;">
+              <span>Reach (3-hop)</span><span id="reachable-readout">≥ 0</span>
+            </div>
+            <input id="reachable-slider" type="range" min="0" max="100" step="1" value="0"
+              style="width:100%;accent-color:#58a6ff;cursor:pointer;">
+          </div>
+        </div>
       </div>
     </div>
 
@@ -133,11 +157,17 @@ export function initUI(data, topDirs) {
       "></div>
       <div id="legend-risk" style="
         display:none; background:rgba(13,17,23,0.85); border:1px solid #30363d;
-        border-radius:8px; padding:8px 12px; font-size:11px;
+        border-radius:8px; padding:8px 12px; font-size:11px; flex-direction:column; gap:8px;
       ">
-        <div style="display:flex; align-items:center; gap:8px">
-          <div style="width:100px; height:8px; border-radius:4px; background:linear-gradient(90deg,#3fb950,#e3b341,#ff6b6b)"></div>
-          <span style="color:#8b949e">Low → High risk</span>
+        <div style="display:flex; gap:4px;">
+          <button id="risk-band-low"  style="flex:1;border:1px solid #30363d;border-radius:5px;background:rgba(13,17,23,0.9);color:#8b949e;padding:4px;font-size:10px;cursor:pointer;font-family:inherit;">Low ≥1%</button>
+          <button id="risk-band-med"  style="flex:1;border:1px solid #30363d;border-radius:5px;background:rgba(13,17,23,0.9);color:#8b949e;padding:4px;font-size:10px;cursor:pointer;font-family:inherit;">Med ≥10%</button>
+          <button id="risk-band-high" style="flex:1;border:1px solid #30363d;border-radius:5px;background:rgba(13,17,23,0.9);color:#8b949e;padding:4px;font-size:10px;cursor:pointer;font-family:inherit;">High ≥33%</button>
+        </div>
+        <input id="risk-filter-slider" type="range" min="0" max="1" step="0.01" value="0"
+          style="width:100%;accent-color:#58a6ff;cursor:pointer;">
+        <div style="display:flex;justify-content:space-between;color:#6e7681;font-size:10px;">
+          <span>0%</span><span>100%</span>
         </div>
       </div>
       <div id="legend-ownership" style="
@@ -151,6 +181,72 @@ export function initUI(data, topDirs) {
   const uiContainer = document.createElement('div');
   uiContainer.innerHTML = uiHTML;
   document.body.appendChild(uiContainer);
+
+  // ── Filter chips ──
+  const _CHIP_PREFIXES = {
+    'owner-filter-chip': 'Owner', 'risk-filter-chip': 'Risk',
+    'degree-filter-chip': 'Degree', 'reachable-filter-chip': 'Reach',
+  };
+  function _makeChip(id, labelId, onClear) {
+    const chip = document.createElement('div');
+    chip.id = id;
+    chip.style.cssText = `
+      display:none; align-items:center; gap:6px;
+      background:rgba(88,166,255,0.12); border:1px solid rgba(88,166,255,0.3);
+      border-radius:6px; padding:4px 8px; font-size:11px; color:#58a6ff;
+    `;
+    chip.innerHTML = `
+      <span style="color:#6e7681;font-size:10px">${_CHIP_PREFIXES[id] || ''}</span>
+      <span id="${labelId}" style="font-weight:600;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;max-width:140px"></span>
+      <button style="background:none;border:none;color:#58a6ff;cursor:pointer;font-size:13px;padding:0;line-height:1;margin-left:auto">×</button>
+    `;
+    chip.querySelector('button').addEventListener('click', onClear);
+    return chip;
+  }
+  const chipsContainer = document.getElementById('filter-chips');
+  chipsContainer.appendChild(_makeChip('owner-filter-chip',    'owner-filter-label',
+    () => setOwnerFilter(null)));
+  chipsContainer.appendChild(_makeChip('risk-filter-chip',     'risk-filter-label',
+    () => { setRiskFilter(null); document.getElementById('risk-filter-slider').value = 0; }));
+  chipsContainer.appendChild(_makeChip('degree-filter-chip',   'degree-filter-label',
+    () => {
+      setDegreeFilter(null);
+      document.getElementById('degree-slider').value = 0;
+      document.getElementById('degree-readout').textContent = '≥ 0';
+    }));
+  chipsContainer.appendChild(_makeChip('reachable-filter-chip','reachable-filter-label',
+    () => {
+      setReachableFilter(null);
+      document.getElementById('reachable-slider').value = 0;
+      document.getElementById('reachable-readout').textContent = '≥ 0';
+    }));
+
+  // ── Risk band buttons and slider ──
+  ['low', 'med', 'high'].forEach(band => {
+    document.getElementById(`risk-band-${band}`).addEventListener('click', () => {
+      const threshold = RISK_BANDS[band];
+      const current = getRiskMin();
+      const next = (current !== null && Math.abs(current - threshold) < 0.001) ? null : threshold;
+      setRiskFilter(next);
+      document.getElementById('risk-filter-slider').value = next !== null ? next : 0;
+    });
+  });
+  document.getElementById('risk-filter-slider').addEventListener('input', (e) => {
+    const val = parseFloat(e.target.value);
+    setRiskFilter(val > 0 ? val : null);
+  });
+
+  // ── Connectivity sliders ──
+  document.getElementById('degree-slider').addEventListener('input', (e) => {
+    const val = parseInt(e.target.value);
+    document.getElementById('degree-readout').textContent = `≥ ${val}`;
+    setDegreeFilter(val);
+  });
+  document.getElementById('reachable-slider').addEventListener('input', (e) => {
+    const val = parseInt(e.target.value);
+    document.getElementById('reachable-readout').textContent = `≥ ${val}`;
+    setReachableFilter(val);
+  });
 
   // ── Hotspots ──
   const hotspotList = document.getElementById('hotspot-list');
@@ -209,12 +305,20 @@ export function initUI(data, topDirs) {
 
     for (const [owner, count] of owners) {
       const row = document.createElement('div');
-      row.style.cssText = 'display:flex; align-items:center; gap:8px;';
+      row.className = 'owner-legend-row';
+      row.dataset.owner = owner;
+      row.style.cssText = 'display:flex; align-items:center; gap:8px; cursor:pointer; padding:2px 4px;';
+      row.onmouseenter = () => { if (getOwnerFilter() !== owner) row.style.background = 'rgba(255,255,255,0.05)'; };
+      row.onmouseleave = () => { if (getOwnerFilter() !== owner) row.style.background = ''; };
       row.innerHTML = `
         <div style="width:10px;height:10px;border-radius:50%;background:${ownerColor(owner)};flex-shrink:0"></div>
         <span style="color:#8b949e;flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${esc(owner)}</span>
         <span style="color:#6e7681">${count}</span>
       `;
+      row.addEventListener('click', () => {
+        const current = getOwnerFilter();
+        setOwnerFilter(current === owner ? null : owner); // toggle
+      });
       legendOwnership.appendChild(row);
     }
 
