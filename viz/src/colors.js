@@ -2,11 +2,13 @@
  * Shared color palettes for the visualization.
  */
 
-// 12-color palette for top-level directories (architecture mode)
+// 16-color palette for directories (architecture mode) and owners (ownership mode)
+// First 12 = Phase 1 architecture colors. Last 4 added for Phase 2 ownership.
 export const DIR_COLORS = [
   '#58a6ff', '#3fb950', '#d2a8ff', '#ffa657',
   '#f78166', '#79c0ff', '#56d364', '#e3b341',
   '#ff7b72', '#a5d6ff', '#7ee787', '#ffa198',
+  '#db6d28', '#388bfd', '#bc8cff', '#4ac26b',
 ];
 
 export function dirColor(index) {
@@ -39,3 +41,27 @@ export function riskColor(score) {
 
 // Background color
 export const BG_COLOR = 0x0d1117;
+
+// Fixed color for unowned files (muted gray)
+export const UNOWNED_COLOR = '#484f58';
+
+/**
+ * DJB2 hash — maps a string to a non-negative integer.
+ */
+function djb2(str) {
+  let hash = 5381;
+  for (let i = 0; i < str.length; i++) {
+    hash = (((hash << 5) + hash) + str.charCodeAt(i)) | 0;
+  }
+  return Math.abs(hash);
+}
+
+/**
+ * Map an owner name to a color from the 16-color palette.
+ * "unowned" always returns UNOWNED_COLOR.
+ * Two owners may share a color (hash collision) — acceptable given 16 colors + 10-owner legend cap.
+ */
+export function ownerColor(ownerName) {
+  if (!ownerName || ownerName === 'unowned') return UNOWNED_COLOR;
+  return DIR_COLORS[djb2(ownerName) % DIR_COLORS.length];
+}
