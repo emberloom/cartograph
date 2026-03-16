@@ -1,7 +1,7 @@
 import * as THREE from 'three';
 import { camera, renderer, markDirty, setResizeCallback } from './renderer.js';
 import { fileNodes } from './layout.js';
-import { setHighlight, updateColors } from './nodes.js';
+import { startRipple, clearRipple, updateColors } from './nodes.js';
 import { setEdgeOpacity, getEdgeMesh } from './edges.js';
 
 // ── State ──
@@ -28,6 +28,7 @@ let panOffset = { x: 0, y: 0 };
 let isPanning = false;
 let panStart = { x: 0, y: 0 };
 let didPan = false; // true if mouse moved during drag — suppresses click
+let animating = false;
 
 /**
  * Initialize interaction: zoom, pan, picking, selection.
@@ -140,34 +141,6 @@ export function initInteraction(data) {
     zoomLevel = 1;
   });
 
-  // Animated camera transition
-  let animating = false;
-  let animTarget = { zoom: 1, panX: 0, panY: 0 };
-
-  function animateToTarget(targetZoom, targetPanX, targetPanY, duration, onComplete) {
-    const startZoom = zoomLevel;
-    const startPanX = panOffset.x;
-    const startPanY = panOffset.y;
-    const startTime = performance.now();
-    animating = true;
-
-    function step(now) {
-      const t = Math.min(1, (now - startTime) / duration);
-      const ease = t * (2 - t); // ease-out quad
-      zoomLevel = startZoom + (targetZoom - startZoom) * ease;
-      panOffset.x = startPanX + (targetPanX - startPanX) * ease;
-      panOffset.y = startPanY + (targetPanY - startPanY) * ease;
-      applyZoom();
-      if (t < 1) {
-        requestAnimationFrame(step);
-      } else {
-        animating = false;
-        if (onComplete) onComplete();
-      }
-    }
-    requestAnimationFrame(step);
-  }
-
   // Listen for navigate-to-node from hotspots/search
   window.addEventListener('navigate-to-node', (e) => {
     const id = e.detail.id;
@@ -176,12 +149,47 @@ export function initInteraction(data) {
 
     const targetPanX = node.x - (camInitial.right + camInitial.left) / 2;
     const targetPanY = -node.y - (camInitial.top + camInitial.bottom) / 2;
-    const targetZoom = 4;
 
-    animateToTarget(targetZoom, targetPanX, targetPanY, 400, () => {
+    flyTo(targetPanX, targetPanY, 4, 400, () => {
       selectNode(node);
     });
   });
+}
+
+/**
+ * Animate camera to a position.
+ * panX/panY: world-space offset from initial camera center.
+ * zoom: 1.0 = initial full view.
+ * duration: milliseconds.
+ * onComplete: optional callback when animation finishes.
+ */
+export function flyTo(panX, panY, zoom, duration, onComplete) {
+  const startZoom = zoomLevel;
+  const startPanX = panOffset.x;
+  const startPanY = panOffset.y;
+  const startTime = performance.now();
+  animating = true;
+
+  function step(now) {
+    const t = Math.min(1, (now - startTime) / duration);
+    const ease = t * (2 - t);
+    zoomLevel = startZoom + (zoom - startZoom) * ease;
+    panOffset.x = startPanX + (panX - startPanX) * ease;
+    panOffset.y = startPanY + (panY - startPanY) * ease;
+    applyZoom();
+    if (t < 1) {
+      requestAnimationFrame(step);
+    } else {
+      animating = false;
+      if (onComplete) onComplete();
+    }
+  }
+  requestAnimationFrame(step);
+}
+
+/** Return current initial camera bounds (needed by tour.js for coordinate math). */
+export function getCamInitial() {
+  return { ...camInitial };
 }
 
 export function updateCamInitial() {
@@ -309,7 +317,11 @@ function selectNode(node) {
   const highlightIds = new Set(Object.keys(blastDepth).map(Number));
   highlightIds.add(node.id);
 
-  setHighlight(highlightIds, blastDepth, node.id);
+  const nodesByDepth = {};
+  for (const [id, d] of Object.entries(blastDepth)) {
+    (nodesByDepth[d] ||= []).push(Number(id));
+  }
+  startRipple(nodesByDepth, node.id);
   setEdgeOpacity(0.03);
 
   // Dispatch custom event for UI to listen to
@@ -327,8 +339,7 @@ function selectNode(node) {
 
 export function clearSelection() {
   selectedNode = null;
-  setHighlight(null, null, null);
-  updateColors(currentMode);
+  clearRipple(currentMode);
   setEdgeOpacity(null);
 
   window.dispatchEvent(new CustomEvent('node-deselected'));
