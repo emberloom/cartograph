@@ -42,12 +42,12 @@ async function init() {
   initUI(data, topDirs);
 
   // 3. initFilters stores blast counts (no DOM access at this point)
-  initFilters(getBlastCounts());
+  const blastCounts = getBlastCounts();
+  initFilters(blastCounts);
 
   // 4. Set slider max values from actual data — must come after initUI (sliders exist).
   //    Use reduce to avoid call stack limit on large arrays.
   //    Math.max(..., 1) ensures sliders are never collapsed to zero-range on degenerate data.
-  const blastCounts = getBlastCounts();
   const maxDegree = Math.max(fileNodes.reduce((m, fn) => Math.max(m, fn.degree), 0), 1);
   const maxReachable = Math.max(blastCounts.reduce((m, v) => Math.max(m, v), 0), 1);
   const degSlider = document.getElementById('degree-slider');
