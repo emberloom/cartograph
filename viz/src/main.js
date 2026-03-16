@@ -3,6 +3,7 @@ import { computeLayout } from './layout.js';
 import { initRenderer, addRegions, markDirty } from './renderer.js';
 import { createNodes } from './nodes.js';
 import { createEdges } from './edges.js';
+import { initInteraction } from './interaction.js';
 
 async function init() {
   const status = document.getElementById('load-status');
@@ -26,6 +27,9 @@ async function init() {
 
   status.textContent = 'Drawing edges...';
   createEdges(data.struct_edges);
+
+  status.textContent = 'Setting up interaction...';
+  initInteraction(data);
 
   // Dismiss loading overlay
   const overlay = document.getElementById('loading-overlay');
