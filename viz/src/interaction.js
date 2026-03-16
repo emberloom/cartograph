@@ -314,8 +314,6 @@ function selectNode(node) {
   selectedNode = node;
 
   const blastDepth = blastRadiusBFS(node.id, 3);
-  const highlightIds = new Set(Object.keys(blastDepth).map(Number));
-  highlightIds.add(node.id);
 
   const nodesByDepth = {};
   for (const [id, d] of Object.entries(blastDepth)) {
