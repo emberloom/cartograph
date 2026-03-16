@@ -64,7 +64,7 @@ export function initUI(data, topDirs) {
             <div style="display:flex;justify-content:space-between;color:#8b949e;font-size:10px;margin-bottom:2px;">
               <span>Reach (3-hop)</span><span id="reachable-readout">≥ 0</span>
             </div>
-            <input id="reachable-slider" type="range" min="0" max="100" step="1" value="0"
+            <input id="reachable-slider" type="range" min="0" max="9999" step="1" value="0"
               style="width:100%;accent-color:#58a6ff;cursor:pointer;">
           </div>
         </div>

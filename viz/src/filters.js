@@ -23,7 +23,7 @@ export function initFilters(blastCounts) {
 }
 
 // Setters normalise 0 → null for degree/reachable so _apply() has a clean invariant
-export function setOwnerFilter(name)    { _ownerFilter = name;                    _apply(); }
+export function setOwnerFilter(name)    { _ownerFilter = name || null;             _apply(); }
 export function setRiskFilter(min)      { _riskMin = min;                         _apply(); }
 export function setDegreeFilter(min)    { _degreeMin = (min > 0) ? min : null;    _apply(); }
 export function setReachableFilter(min) { _reachableMin = (min > 0) ? min : null; _apply(); }
