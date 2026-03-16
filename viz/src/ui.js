@@ -1,5 +1,6 @@
 import { switchMode } from './modes.js';
 import { clearSelection } from './interaction.js';
+import { startTour } from './tour.js';
 import { fileNodes } from './layout.js';
 import { dirColor, ownerColor } from './colors.js';
 
@@ -96,6 +97,11 @@ export function initUI(data, topDirs) {
           border-radius:6px; margin-top:4px; z-index:20;
         "></div>
       </div>
+      <button id="tour-btn" style="
+        background:rgba(13,17,23,0.9); border:1px solid #30363d;
+        border-radius:6px; color:#8b949e; padding:6px 10px;
+        font-size:11px; font-family:inherit; cursor:pointer; align-self:flex-start;
+      ">?</button>
     </div>
 
     <!-- Bottom-left: selection detail -->
@@ -242,6 +248,9 @@ export function initUI(data, topDirs) {
       }));
     });
   });
+
+  // ── Tour button ──
+  document.getElementById('tour-btn').addEventListener('click', () => startTour());
 
   // ── Close selection ──
   document.getElementById('close-sel').addEventListener('click', clearSelection);

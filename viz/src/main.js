@@ -6,6 +6,7 @@ import { createEdges } from './edges.js';
 import { initInteraction } from './interaction.js';
 import { initUI } from './ui.js';
 import { initScrubber } from './scrubber.js';
+import { initTour } from './tour.js';
 
 async function init() {
   const status = document.getElementById('load-status');
@@ -42,6 +43,9 @@ async function init() {
   // Time scrubber
   const scrubberEl = document.getElementById('scrubber-container');
   if (scrubberEl) initScrubber(data.commits || null, scrubberEl);
+
+  // Guided tour
+  initTour(data);
 
   // Dismiss loading overlay
   const overlay = document.getElementById('loading-overlay');
