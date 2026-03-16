@@ -2,6 +2,7 @@ import * as THREE from 'three';
 import { camera, renderer, markDirty, setResizeCallback } from './renderer.js';
 import { fileNodes } from './layout.js';
 import { startRipple, clearRipple, updateColors } from './nodes.js';
+import { initParticles, clearParticles } from './particles.js';
 import { setEdgeOpacity, getEdgeMesh } from './edges.js';
 
 // ── State ──
@@ -117,10 +118,16 @@ export function initInteraction(data) {
         markDirty();
       }
     }
-    // Co-change layer: controls whether co-change arcs draw on selection
-    // (no pre-rendered geometry to toggle — it's created on selectNode)
     if (layer === 'cochange') {
       showCochange = visible;
+      if (selectedNode) {
+        if (visible) {
+          const cochanges = cochangeByNode[String(selectedNode.id)] || [];
+          initParticles(selectedNode.id, cochanges, fileNodes);
+        } else {
+          clearParticles();
+        }
+      }
     }
   });
 
@@ -320,6 +327,10 @@ function selectNode(node) {
     (nodesByDepth[d] ||= []).push(Number(id));
   }
   startRipple(nodesByDepth, node.id);
+  if (showCochange) {
+    const cochanges = cochangeByNode[String(node.id)] || [];
+    initParticles(node.id, cochanges, fileNodes);
+  }
   setEdgeOpacity(0.03);
 
   // Dispatch custom event for UI to listen to
@@ -338,6 +349,7 @@ function selectNode(node) {
 export function clearSelection() {
   selectedNode = null;
   clearRipple(currentMode);
+  clearParticles();
   setEdgeOpacity(null);
 
   window.dispatchEvent(new CustomEvent('node-deselected'));
