@@ -1,4 +1,3 @@
-import { updateColors } from './nodes.js';
 import { markDirty } from './renderer.js';
 import { setMode as setInteractionMode } from './interaction.js';
 
@@ -7,8 +6,7 @@ let currentMode = 'architecture';
 export function switchMode(mode) {
   if (mode === currentMode) return;
   currentMode = mode;
-  updateColors(mode);
-  setInteractionMode(mode);
+  setInteractionMode(mode); // handles updateColors internally (guards on selectedNode)
 
   // Update button states
   document.querySelectorAll('.mode-btn').forEach(btn => {
