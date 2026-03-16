@@ -1,9 +1,10 @@
 import { loadData } from './data.js';
-import { computeLayout } from './layout.js';
+import { computeLayout, fileNodes } from './layout.js';
 import { initRenderer, addRegions, markDirty } from './renderer.js';
 import { createNodes } from './nodes.js';
 import { createEdges } from './edges.js';
 import { initInteraction } from './interaction.js';
+import { initUI } from './ui.js';
 
 async function init() {
   const status = document.getElementById('load-status');
@@ -30,6 +31,12 @@ async function init() {
 
   status.textContent = 'Setting up interaction...';
   initInteraction(data);
+
+  // Collect top-level directory names for legend
+  const topDirs = [...new Set(layout.fileNodes.map(fn => fn.topLevelDir))].filter(Boolean).sort();
+
+  status.textContent = 'Building UI...';
+  initUI(data, topDirs);
 
   // Dismiss loading overlay
   const overlay = document.getElementById('loading-overlay');
