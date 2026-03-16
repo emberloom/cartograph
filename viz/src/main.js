@@ -2,6 +2,7 @@ import { loadData } from './data.js';
 import { computeLayout } from './layout.js';
 import { initRenderer, addRegions, markDirty } from './renderer.js';
 import { createNodes } from './nodes.js';
+import { createEdges } from './edges.js';
 
 async function init() {
   const status = document.getElementById('load-status');
@@ -22,6 +23,9 @@ async function init() {
 
   status.textContent = 'Drawing nodes...';
   createNodes(layout.fileNodes);
+
+  status.textContent = 'Drawing edges...';
+  createEdges(data.struct_edges);
 
   // Dismiss loading overlay
   const overlay = document.getElementById('loading-overlay');
