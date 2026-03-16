@@ -1,7 +1,7 @@
 import { switchMode } from './modes.js';
 import { clearSelection } from './interaction.js';
 import { fileNodes } from './layout.js';
-import { dirColor } from './colors.js';
+import { dirColor, ownerColor } from './colors.js';
 
 /** Escape HTML special characters to prevent XSS from repo data. */
 function esc(str) {
@@ -62,6 +62,11 @@ export function initUI(data, topDirs) {
           border-radius:6px; color:#8b949e; padding:6px 12px;
           font-size:11px; font-family:inherit; cursor:pointer;
         ">Risk</button>
+        <button class="mode-btn" data-mode="ownership" style="
+          background:rgba(13,17,23,0.9); border:1px solid #30363d;
+          border-radius:6px; color:#8b949e; padding:6px 12px;
+          font-size:11px; font-family:inherit; cursor:pointer;
+        ">Ownership</button>
       </div>
       <div style="display:flex; gap:4px">
         <button class="layer-btn active" data-layer="imports" style="
@@ -129,6 +134,11 @@ export function initUI(data, topDirs) {
           <span style="color:#8b949e">Low → High risk</span>
         </div>
       </div>
+      <div id="legend-ownership" style="
+        display:none; background:rgba(13,17,23,0.85); border:1px solid #30363d;
+        border-radius:8px; padding:8px 12px; font-size:11px;
+        flex-direction:column; gap:4px; max-height:200px; overflow-y:auto;
+      "></div>
     </div>
   `;
 
@@ -168,6 +178,51 @@ export function initUI(data, topDirs) {
     `;
     legendArch.appendChild(row);
   }
+
+  // ── Ownership legend (populated on mode-changed event) ──
+  window.addEventListener('mode-changed', (e) => {
+    if (e.detail.mode !== 'ownership') return;
+    const legendOwnership = document.getElementById('legend-ownership');
+    if (!legendOwnership) return;
+    legendOwnership.innerHTML = '';
+
+    // Count files per owner
+    const ownerFileCounts = new Map();
+    for (const fn of fileNodes) {
+      const o = fn.owner || 'unowned';
+      ownerFileCounts.set(o, (ownerFileCounts.get(o) || 0) + 1);
+    }
+
+    // Sort: desc by file count, then alpha by name. "unowned" always last.
+    const owners = [...ownerFileCounts.entries()]
+      .filter(([o]) => o !== 'unowned')
+      .sort((a, b) => b[1] - a[1] || a[0].localeCompare(b[0]))
+      .slice(0, 10);
+
+    const unownedCount = ownerFileCounts.get('unowned') || 0;
+
+    for (const [owner, count] of owners) {
+      const row = document.createElement('div');
+      row.style.cssText = 'display:flex; align-items:center; gap:8px;';
+      row.innerHTML = `
+        <div style="width:10px;height:10px;border-radius:50%;background:${ownerColor(owner)};flex-shrink:0"></div>
+        <span style="color:#8b949e;flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${esc(owner)}</span>
+        <span style="color:#6e7681">${count}</span>
+      `;
+      legendOwnership.appendChild(row);
+    }
+
+    if (unownedCount > 0) {
+      const row = document.createElement('div');
+      row.style.cssText = 'display:flex; align-items:center; gap:8px;';
+      row.innerHTML = `
+        <div style="width:10px;height:10px;border-radius:50%;background:#484f58;flex-shrink:0"></div>
+        <span style="color:#6e7681;flex:1">Unowned</span>
+        <span style="color:#6e7681">${unownedCount}</span>
+      `;
+      legendOwnership.appendChild(row);
+    }
+  });
 
   // ── Mode buttons ──
   document.querySelectorAll('.mode-btn').forEach(btn => {
