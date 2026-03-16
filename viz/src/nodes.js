@@ -23,6 +23,7 @@ let _pulseTime = 0;
 
 // ── Scrubber state ──
 let _scrubberMask = null; // Set<number> | null
+let _filterMask = null; // Set<number> | null — computed by filters.js
 let _currentMode = 'architecture';
 
 const BLAST_COLORS = ['#ff6b6b', '#ff9f43', '#ffd93d'];
@@ -93,8 +94,11 @@ export function updateColors(mode) {
     } else {
       _color.set(dirColor(fn.topLevelDirIdx));
     }
-    // Apply scrubber mask brightness multiplier
-    if (_scrubberMask !== null && !_scrubberMask.has(fn.id)) {
+    // Apply brightness masks (scrubber + unified filter compose: fail either → dim)
+    const shouldDim =
+      (_scrubberMask !== null && !_scrubberMask.has(fn.id)) ||
+      (_filterMask !== null && !_filterMask.has(fn.id));
+    if (shouldDim) {
       _color.multiplyScalar(0.2);
     }
     instancedMesh.setColorAt(i, _color);
@@ -255,6 +259,21 @@ export function clearRipple(mode) {
  */
 export function setScrubberMask(activeSet) {
   _scrubberMask = activeSet;
+  if (!_rippleActive) {
+    updateColors(_currentMode);
+  }
+}
+
+/**
+ * Set computed filter mask from filters.js.
+ * null = no filter active (all nodes fully visible).
+ * Composes with scrubber mask: a node must pass both to be bright.
+ * Note: _rippleActive and _currentMode are existing variables in this file,
+ * also used by setScrubberMask above.
+ * @param {Set<number>|null} mask
+ */
+export function setFilterMask(mask) {
+  _filterMask = mask;
   if (!_rippleActive) {
     updateColors(_currentMode);
   }
