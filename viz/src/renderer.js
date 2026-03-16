@@ -7,6 +7,12 @@ import { BG_COLOR } from './colors.js';
 export let scene, camera, renderer, composer;
 export let dirty = true;
 
+let _onResizeCallback = null;
+
+export function setResizeCallback(fn) {
+  _onResizeCallback = fn;
+}
+
 const BLOOM_STRENGTH = 0.4;
 const BLOOM_RADIUS = 0.8;
 const BLOOM_THRESHOLD = 0.6;
@@ -82,6 +88,7 @@ export function initRenderer(container, bounds) {
     camera.bottom = cy - newViewH / 2;
     camera.updateProjectionMatrix();
     markDirty();
+    if (_onResizeCallback) _onResizeCallback();
   });
 
   // Render loop (on-demand)

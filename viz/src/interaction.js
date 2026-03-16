@@ -1,9 +1,8 @@
 import * as THREE from 'three';
-import { camera, renderer, markDirty } from './renderer.js';
-import { fileNodes, filePositions } from './layout.js';
-import { setHighlight, updateColors, getInstancedMesh } from './nodes.js';
+import { camera, renderer, markDirty, setResizeCallback } from './renderer.js';
+import { fileNodes } from './layout.js';
+import { setHighlight, updateColors } from './nodes.js';
 import { setEdgeOpacity, getEdgeMesh } from './edges.js';
-import { dirColor } from './colors.js';
 
 // ── State ──
 let selectedNode = null;
@@ -128,6 +127,27 @@ export function initInteraction(data) {
   window.addEventListener('keydown', (e) => {
     if (e.key === 'Escape') clearSelection();
   });
+
+  setResizeCallback(() => {
+    camInitial = {
+      left: camera.left,
+      right: camera.right,
+      top: camera.top,
+      bottom: camera.bottom,
+    };
+    // Reset pan and zoom when window resizes
+    panOffset = { x: 0, y: 0 };
+    zoomLevel = 1;
+  });
+}
+
+export function updateCamInitial() {
+  camInitial = {
+    left: camera.left,
+    right: camera.right,
+    top: camera.top,
+    bottom: camera.bottom,
+  };
 }
 
 function onWheel(e) {
