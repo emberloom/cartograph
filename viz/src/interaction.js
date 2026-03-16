@@ -139,6 +139,49 @@ export function initInteraction(data) {
     panOffset = { x: 0, y: 0 };
     zoomLevel = 1;
   });
+
+  // Animated camera transition
+  let animating = false;
+  let animTarget = { zoom: 1, panX: 0, panY: 0 };
+
+  function animateToTarget(targetZoom, targetPanX, targetPanY, duration, onComplete) {
+    const startZoom = zoomLevel;
+    const startPanX = panOffset.x;
+    const startPanY = panOffset.y;
+    const startTime = performance.now();
+    animating = true;
+
+    function step(now) {
+      const t = Math.min(1, (now - startTime) / duration);
+      const ease = t * (2 - t); // ease-out quad
+      zoomLevel = startZoom + (targetZoom - startZoom) * ease;
+      panOffset.x = startPanX + (targetPanX - startPanX) * ease;
+      panOffset.y = startPanY + (targetPanY - startPanY) * ease;
+      applyZoom();
+      if (t < 1) {
+        requestAnimationFrame(step);
+      } else {
+        animating = false;
+        if (onComplete) onComplete();
+      }
+    }
+    requestAnimationFrame(step);
+  }
+
+  // Listen for navigate-to-node from hotspots/search
+  window.addEventListener('navigate-to-node', (e) => {
+    const id = e.detail.id;
+    const node = fileNodes.find(fn => fn.id === id);
+    if (!node) return;
+
+    const targetPanX = node.x - (camInitial.right + camInitial.left) / 2;
+    const targetPanY = -node.y - (camInitial.top + camInitial.bottom) / 2;
+    const targetZoom = 4;
+
+    animateToTarget(targetZoom, targetPanX, targetPanY, 400, () => {
+      selectNode(node);
+    });
+  });
 }
 
 export function updateCamInitial() {

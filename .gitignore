@@ -22,3 +22,5 @@ viz/dist/
 .idea/
 .vscode/
 *.iml
+viz/node_modules/
+viz/public/data.json
