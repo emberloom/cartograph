@@ -89,6 +89,8 @@ export function updateColors(mode) {
 export function setHighlight(highlightIds, blastDepth, selectedId) {
   if (!instancedMesh) return;
 
+  const blastColors = ['#ff6b6b', '#ff9f43', '#ffd93d'];
+
   for (let i = 0; i < nodeCount; i++) {
     const fn = fileNodesRef[i];
 
@@ -113,9 +115,14 @@ export function setHighlight(highlightIds, blastDepth, selectedId) {
       _color.set('#ffffff');
       instancedMesh.setColorAt(i, _color);
     } else if (blastDepth && blastDepth[fn.id] !== undefined) {
-      // Blast radius nodes
+      // Blast radius nodes: restore scale + set depth color
       const depth = blastDepth[fn.id];
-      const blastColors = ['#ff6b6b', '#ff9f43', '#ffd93d'];
+      instancedMesh.getMatrixAt(i, _matrix);
+      _matrix.decompose(_position, _quaternion, _scale);
+      const r = nodeRadius(fn.degree);
+      _scale.set(r, r, 1);
+      _matrix.compose(_position, _quaternion, _scale);
+      instancedMesh.setMatrixAt(i, _matrix);
       _color.set(blastColors[depth - 1] || '#ffd93d');
       instancedMesh.setColorAt(i, _color);
     } else if (!highlightIds.has(fn.id)) {
