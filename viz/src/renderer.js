@@ -7,6 +7,35 @@ import { BG_COLOR } from './colors.js';
 export let scene, camera, renderer, composer;
 export let dirty = true;
 
+// ── Conditional animation loop ──
+let _animSubs = 0;
+const _tickCbs = [];
+let _lastFrameTime = 0;
+
+/** Subscribe to continuous per-frame animation. Call when animation starts. */
+export function startContinuousAnimation() {
+  _animSubs++;
+}
+
+/** Unsubscribe from continuous animation. Counter is floored at 0. */
+export function stopContinuousAnimation() {
+  _animSubs = Math.max(0, _animSubs - 1);
+}
+
+/** Register a tick callback: fn(dt) called each frame while animating. */
+export function registerTickCallback(fn) {
+  if (!_tickCbs.includes(fn)) _tickCbs.push(fn);
+}
+
+/** Unregister a previously registered tick callback. */
+export function unregisterTickCallback(fn) {
+  const i = _tickCbs.indexOf(fn);
+  if (i !== -1) _tickCbs.splice(i, 1);
+}
+
+/** Expose the Three.js scene so modules can add objects to it. */
+export function getScene() { return scene; }
+
 let _onResizeCallback = null;
 
 export function setResizeCallback(fn) {
@@ -91,21 +120,44 @@ export function initRenderer(container, bounds) {
     if (_onResizeCallback) _onResizeCallback();
   });
 
-  // Render loop (on-demand)
-  function renderLoop() {
+  // Render loop: continuous when animations are active, on-demand otherwise
+  function renderLoop(now) {
     requestAnimationFrame(renderLoop);
-    if (dirty) {
+    const dt = _lastFrameTime === 0 ? 0 : Math.min((now - _lastFrameTime) / 1000, 0.1);
+    _lastFrameTime = now;
+
+    if (_animSubs > 0) {
+      for (const cb of _tickCbs) cb(dt);
+      composer.render();
+    } else if (dirty) {
       composer.render();
       dirty = false;
     }
   }
-  renderLoop();
+  requestAnimationFrame(renderLoop);
 
   return { scene, camera, renderer, composer };
 }
 
 export function markDirty() {
   dirty = true;
+}
+
+// Internal map: region name → { mat: MeshBasicMaterial, originalColor: THREE.Color }
+const _regionMaterials = new Map();
+
+/**
+ * Update region fill colors. Pass a Map<name, THREE.Color> for ownership mode,
+ * or an empty Map / null to reset all regions to their original directory colors.
+ * @param {Map<string, THREE.Color>|null} colorMap
+ */
+export function updateRegionColors(colorMap) {
+  for (const [name, entry] of _regionMaterials) {
+    const newColor = colorMap?.get(name);
+    entry.mat.color.copy(newColor ?? entry.originalColor);
+    entry.mat.needsUpdate = true;
+  }
+  markDirty();
 }
 
 /**
@@ -132,6 +184,8 @@ export function addRegions(regions) {
       opacity,
       depthWrite: false,
     });
+    // Store reference for updateRegionColors
+    _regionMaterials.set(r.name, { mat: fillMat, originalColor: color.clone() });
     const fill = new THREE.Mesh(fillGeo, fillMat);
     fill.position.set(cx, -cy, -1); // z=-1 behind nodes
     scene.add(fill);
