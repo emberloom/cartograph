@@ -1,4 +1,4 @@
-use cartograph::{historian, parser, query, server, store};
+use cartograph::{historian, integrations, parser, query, server, store};
 use clap::{Parser, Subcommand};
 
 #[derive(Parser)]
@@ -51,6 +51,19 @@ enum Commands {
         /// Use stdio transport (default, for Claude Code / Codex)
         #[arg(long, default_value = "true")]
         stdio: bool,
+    },
+
+    /// Generate a CI report for changed files
+    CiReport {
+        /// Comma-separated list of changed file paths
+        #[arg(long)]
+        changed: String,
+        /// Output format: sarif, github-actions, json
+        #[arg(short, long, default_value = "json")]
+        format: String,
+        /// Fail threshold: none, low, medium, high, critical
+        #[arg(long, default_value = "none")]
+        fail_on: String,
     },
 }
 
@@ -195,6 +208,56 @@ fn main() -> anyhow::Result<()> {
         Commands::Serve { .. } => {
             let store = store::graph::GraphStore::new(conn)?;
             server::run_mcp_server(store)?;
+        }
+
+        Commands::CiReport {
+            changed,
+            format,
+            fail_on,
+        } => {
+            let store = store::graph::GraphStore::new(conn)?;
+            let changed_files: Vec<String> =
+                changed.split(',').map(|s| s.trim().to_string()).collect();
+
+            if let Err(e) = integrations::cicd::reporter::validate_changed_files(&changed_files) {
+                eprintln!("Error: {}", e);
+                std::process::exit(2);
+            }
+
+            let threshold: integrations::cicd::FailThreshold = match fail_on.parse() {
+                Ok(t) => t,
+                Err(e) => {
+                    eprintln!("Error: {}", e);
+                    std::process::exit(2);
+                }
+            };
+            let report =
+                integrations::cicd::reporter::generate_report(&store, &changed_files, threshold);
+
+            let output_format: integrations::cicd::OutputFormat = match format.parse() {
+                Ok(f) => f,
+                Err(e) => {
+                    eprintln!("Error: {}", e);
+                    std::process::exit(2);
+                }
+            };
+            match output_format {
+                integrations::cicd::OutputFormat::Sarif => {
+                    let sarif = integrations::cicd::sarif::to_sarif(&report);
+                    println!("{}", serde_json::to_string_pretty(&sarif)?);
+                }
+                integrations::cicd::OutputFormat::GithubActions => {
+                    print!(
+                        "{}",
+                        integrations::cicd::github_actions::format_annotations(&report)
+                    );
+                }
+                integrations::cicd::OutputFormat::Json => {
+                    println!("{}", integrations::cicd::format_json_pretty(&report)?);
+                }
+            }
+
+            std::process::exit(report.exit_code);
         }
     }
 
