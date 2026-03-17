@@ -90,8 +90,29 @@ pub fn tool_definitions() -> Vec<ToolDef> {
                 "required": []
             }),
         },
+        ToolDef {
+            name: "cartograph_policy_check",
+            description: "Evaluate YAML-based architectural policies against the indexed dependency graph and return violations",
+            input_schema: serde_json::json!({
+                "type": "object",
+                "properties": {
+                    "config_yaml": {
+                        "type": "string",
+                        "description": "YAML policy configuration content (inline, not a file path)"
+                    },
+                    "format": {
+                        "type": "string",
+                        "description": "Output format: 'text', 'json', or 'sarif' (default: text)"
+                    }
+                },
+                "required": ["config_yaml"]
+            }),
+        },
     ]
 }
+
+/// Maximum config YAML size (1 MB)
+const MAX_CONFIG_YAML_SIZE: usize = 1_048_576;
 
 /// Maximum traversal depth for blast radius queries
 const MAX_DEPTH: usize = 10;
@@ -217,6 +238,41 @@ pub fn execute_tool(store: &GraphStore, name: &str, params: &Value) -> Result<St
                 out.push_str(&format!("{:<40} {}\n", path, r.edge_count));
             }
             Ok(out)
+        }
+
+        "cartograph_policy_check" => {
+            let config_yaml = params["config_yaml"]
+                .as_str()
+                .ok_or_else(|| anyhow::anyhow!("missing required param: config_yaml"))?;
+
+            if config_yaml.len() > MAX_CONFIG_YAML_SIZE {
+                anyhow::bail!(
+                    "config_yaml too large ({} bytes, max {} bytes)",
+                    config_yaml.len(),
+                    MAX_CONFIG_YAML_SIZE
+                );
+            }
+
+            let policy_config = crate::policy::rules::parse_policy_config(config_yaml)
+                .map_err(|e| anyhow::anyhow!("Failed to parse policy YAML: {}", e))?;
+
+            let validation_errors = policy_config.validate();
+            if !validation_errors.is_empty() {
+                let msgs: Vec<String> = validation_errors.iter().map(|e| e.to_string()).collect();
+                anyhow::bail!(
+                    "Policy config validation errors:\n  - {}",
+                    msgs.join("\n  - ")
+                );
+            }
+
+            let result = crate::policy::engine::evaluate(store, &policy_config);
+            let format = params["format"].as_str().unwrap_or("text");
+            let output = match format {
+                "json" => crate::policy::report::format_json(&result),
+                "sarif" => crate::policy::report::format_sarif(&result),
+                _ => crate::policy::report::format_report(&result),
+            };
+            Ok(output)
         }
 
         other => Err(anyhow::anyhow!("Unknown tool: {other}")),

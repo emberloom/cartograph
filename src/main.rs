@@ -1,4 +1,4 @@
-use cartograph::{historian, parser, query, server, store};
+use cartograph::{historian, parser, policy, query, server, store};
 use clap::{Parser, Subcommand};
 
 #[derive(Parser)]
@@ -51,6 +51,30 @@ enum Commands {
         /// Use stdio transport (default, for Claude Code / Codex)
         #[arg(long, default_value = "true")]
         stdio: bool,
+    },
+    /// Policy as code: check architectural rules against the graph
+    Policy {
+        #[command(subcommand)]
+        command: PolicyCommands,
+    },
+}
+
+#[derive(Subcommand)]
+enum PolicyCommands {
+    /// Check policies against the indexed graph
+    Check {
+        /// Path to the policy YAML config file
+        #[arg(short, long, default_value = "policies.yaml")]
+        config: String,
+        /// Output format: text, json, sarif
+        #[arg(short, long, default_value = "text")]
+        format: String,
+    },
+    /// Generate a starter policy configuration file
+    Init {
+        /// Output path for the generated config
+        #[arg(short, long, default_value = "policies.yaml")]
+        output: String,
     },
 }
 
@@ -196,6 +220,37 @@ fn main() -> anyhow::Result<()> {
             let store = store::graph::GraphStore::new(conn)?;
             server::run_mcp_server(store)?;
         }
+        Commands::Policy { command } => match command {
+            PolicyCommands::Check { config, format } => {
+                let store = store::graph::GraphStore::new(conn)?;
+                let yaml = std::fs::read_to_string(&config)
+                    .map_err(|e| anyhow::anyhow!("Failed to read config '{}': {}", config, e))?;
+                let policy_config = policy::rules::parse_policy_config(&yaml)?;
+                let validation_errors = policy_config.validate();
+                if !validation_errors.is_empty() {
+                    eprintln!("Policy config validation errors:");
+                    for err in &validation_errors {
+                        eprintln!("  - {}", err);
+                    }
+                    anyhow::bail!("Invalid policy configuration");
+                }
+                let result = policy::engine::evaluate(&store, &policy_config);
+                let output = match format.as_str() {
+                    "json" => policy::report::format_json(&result),
+                    "sarif" => policy::report::format_sarif(&result),
+                    _ => policy::report::format_report(&result),
+                };
+                print!("{}", output);
+                if result.has_errors {
+                    std::process::exit(1);
+                }
+            }
+            PolicyCommands::Init { output } => {
+                let config = policy::rules::generate_starter_config();
+                std::fs::write(&output, &config)?;
+                println!("Generated starter policy config: {}", output);
+            }
+        },
     }
 
     Ok(())
