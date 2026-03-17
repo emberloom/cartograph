@@ -1,6 +1,7 @@
 use anyhow::Result;
 use serde_json::Value;
 
+use crate::integrations;
 use crate::query;
 use crate::store::graph::GraphStore;
 
@@ -88,6 +89,20 @@ pub fn tool_definitions() -> Vec<ToolDef> {
                     }
                 },
                 "required": []
+            }),
+        },
+        ToolDef {
+            name: "cartograph_pr_analysis",
+            description: "Analyze a PR (set of changed files) for blast radius, co-change warnings, and reviewer suggestions. Returns a structured Markdown report.",
+            input_schema: serde_json::json!({
+                "type": "object",
+                "properties": {
+                    "changed_files": {
+                        "type": "string",
+                        "description": "Comma-separated list of changed file paths"
+                    }
+                },
+                "required": ["changed_files"]
             }),
         },
     ]
@@ -217,6 +232,25 @@ pub fn execute_tool(store: &GraphStore, name: &str, params: &Value) -> Result<St
                 out.push_str(&format!("{:<40} {}\n", path, r.edge_count));
             }
             Ok(out)
+        }
+
+        "cartograph_pr_analysis" => {
+            let changed_str = params["changed_files"]
+                .as_str()
+                .ok_or_else(|| anyhow::anyhow!("missing required param: changed_files"))?;
+            let changed_files: Vec<String> = changed_str
+                .split(',')
+                .map(|s| s.trim().to_string())
+                .filter(|s| !s.is_empty())
+                .collect();
+
+            integrations::github::analysis::validate_changed_files(&changed_files)?;
+
+            let config = integrations::github::PrAnalysisConfig::default();
+            let report = integrations::github::analysis::analyze_pr(store, &changed_files, &config);
+            Ok(integrations::github::analysis::format_report_markdown(
+                &report,
+            ))
         }
 
         other => Err(anyhow::anyhow!("Unknown tool: {other}")),

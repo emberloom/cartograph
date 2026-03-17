@@ -1,4 +1,4 @@
-use cartograph::{historian, parser, query, server, store};
+use cartograph::{historian, integrations, parser, query, server, store};
 use clap::{Parser, Subcommand};
 
 #[derive(Parser)]
@@ -45,6 +45,12 @@ enum Commands {
         /// Number of results
         #[arg(short, long, default_value = "20")]
         limit: usize,
+    },
+    /// Analyze a PR for blast radius, co-change warnings, and reviewer suggestions
+    PrAnalysis {
+        /// Comma-separated list of changed file paths
+        #[arg(long)]
+        changed: String,
     },
     /// Start MCP server (stdio transport for agent consumption)
     Serve {
@@ -191,6 +197,19 @@ fn main() -> anyhow::Result<()> {
                     println!("{:<40} {}", path, r.edge_count);
                 }
             }
+        }
+        Commands::PrAnalysis { changed } => {
+            let store = store::graph::GraphStore::new(conn)?;
+            let changed_files: Vec<String> =
+                changed.split(',').map(|s| s.trim().to_string()).collect();
+            integrations::github::analysis::validate_changed_files(&changed_files)?;
+            let config = integrations::github::PrAnalysisConfig::default();
+            let report =
+                integrations::github::analysis::analyze_pr(&store, &changed_files, &config);
+            print!(
+                "{}",
+                integrations::github::analysis::format_report_markdown(&report)
+            );
         }
         Commands::Serve { .. } => {
             let store = store::graph::GraphStore::new(conn)?;
