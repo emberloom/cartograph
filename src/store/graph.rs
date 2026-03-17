@@ -38,6 +38,11 @@ impl GraphStore {
         Ok(store)
     }
 
+    /// Return a reference to the underlying database connection.
+    pub fn conn(&self) -> &Connection {
+        &self.conn
+    }
+
     /// Clear all entities and edges (for re-indexing).
     pub fn clear(&mut self) -> Result<()> {
         self.conn

@@ -1,4 +1,4 @@
-use cartograph::{historian, parser, query, server, store};
+use cartograph::{coverage, historian, parser, query, server, store};
 use clap::{Parser, Subcommand};
 
 #[derive(Parser)]
@@ -51,6 +51,34 @@ enum Commands {
         /// Use stdio transport (default, for Claude Code / Codex)
         #[arg(long, default_value = "true")]
         stdio: bool,
+    },
+    /// Test coverage analysis
+    Coverage {
+        #[command(subcommand)]
+        command: CoverageCommands,
+    },
+}
+
+#[derive(Subcommand)]
+enum CoverageCommands {
+    /// Import coverage data from lcov or JSON file
+    Import {
+        /// Path to coverage file (lcov or JSON)
+        file: String,
+        /// Coverage format: lcov or json (auto-detected if omitted)
+        #[arg(short, long)]
+        format: Option<String>,
+    },
+    /// Show coverage report
+    Report,
+    /// Find coverage gaps (hotspot files with low coverage)
+    Gaps {
+        /// Minimum number of graph connections to consider a hotspot
+        #[arg(short, long, default_value = "2")]
+        min_connections: usize,
+        /// Maximum number of results
+        #[arg(short = 'n', long, default_value = "20")]
+        max_results: usize,
     },
 }
 
@@ -196,6 +224,62 @@ fn main() -> anyhow::Result<()> {
             let store = store::graph::GraphStore::new(conn)?;
             server::run_mcp_server(store)?;
         }
+        Commands::Coverage { command } => match command {
+            CoverageCommands::Import { file, format } => {
+                let path = std::path::Path::new(&file);
+                if !path.exists() {
+                    anyhow::bail!("Coverage file not found: {}", file);
+                }
+
+                let content = std::fs::read_to_string(path)?;
+
+                // Validate file size (reject > 100MB)
+                if content.len() > 100 * 1024 * 1024 {
+                    anyhow::bail!(
+                        "Coverage file too large ({} bytes, max 100MB)",
+                        content.len()
+                    );
+                }
+
+                let fmt = match format.as_deref() {
+                    Some("lcov") => "lcov",
+                    Some("json") => "json",
+                    Some(other) => {
+                        anyhow::bail!("Unknown coverage format '{}'. Supported: lcov, json", other);
+                    }
+                    None => coverage::parser::detect_format(&content)?,
+                };
+
+                let files = match fmt {
+                    "lcov" => coverage::parser::parse_lcov(&content)?,
+                    "json" => coverage::parser::parse_json(&content)?,
+                    _ => unreachable!(),
+                };
+
+                coverage::store::init_coverage_table(&conn)?;
+                let count = coverage::store::write_coverage(&conn, &files)?;
+                println!("Imported coverage for {} files (format: {})", count, fmt);
+            }
+            CoverageCommands::Report => {
+                coverage::store::init_coverage_table(&conn)?;
+                let report = coverage::store::read_all_coverage(&conn)?;
+                print!("{}", coverage::overlay::format_coverage_report(&report));
+            }
+            CoverageCommands::Gaps {
+                min_connections,
+                max_results,
+            } => {
+                coverage::store::init_coverage_table(&conn)?;
+                let store = store::graph::GraphStore::new(conn)?;
+                let gaps = coverage::overlay::find_coverage_gaps(
+                    &store,
+                    store.conn(),
+                    min_connections,
+                    max_results,
+                )?;
+                print!("{}", coverage::overlay::format_coverage_gaps(&gaps));
+            }
+        },
     }
 
     Ok(())

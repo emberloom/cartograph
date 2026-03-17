@@ -1,3 +1,4 @@
+pub mod coverage;
 pub mod historian;
 pub mod parser;
 pub mod query;
