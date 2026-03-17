@@ -42,13 +42,23 @@ def load_entities_and_edges(db_path: str, cochange_threshold: float):
         and e["to_id"] in file_ids
     ]
 
-    # Co-change edges
+    # Co-change edges above threshold — used for interactive co-change data
     cochange_edges = [
         e for e in all_edges
         if e["kind"] == "co_changes_with"
         and e["from_id"] in file_ids
         and e["to_id"] in file_ids
         and e["confidence"] >= cochange_threshold
+    ]
+
+    # All co-change edges (no threshold) — used only for time scrubber bucketing
+    # so the scrubber reflects the full temporal spread of activity, not just
+    # high-confidence pairs.
+    temporal_cochange_edges = [
+        e for e in all_edges
+        if e["kind"] == "co_changes_with"
+        and e["from_id"] in file_ids
+        and e["to_id"] in file_ids
     ]
 
     # Ownership: persons + owned_by edges
@@ -73,7 +83,7 @@ def load_entities_and_edges(db_path: str, cochange_threshold: float):
                     person_email.get(pid, ""),
                 )
 
-    return files, struct_edges, cochange_edges, owner_of
+    return files, struct_edges, cochange_edges, temporal_cochange_edges, owner_of
 
 
 def build_tree(files, file_idx, struct_degree, cochange_count,
@@ -183,8 +193,8 @@ def build_commits(files_sorted, file_idx, cochange_edges):
     }
 
 
-def build_data(files, struct_edges, cochange_edges, owner_of,
-               repo_name, max_nodes):
+def build_data(files, struct_edges, cochange_edges, temporal_cochange_edges,
+               owner_of, repo_name, max_nodes):
     """Build the full data.json structure."""
     all_file_ids = {r["id"] for r in files}
 
@@ -319,8 +329,10 @@ def build_data(files, struct_edges, cochange_edges, owner_of,
 
     total_cochange = len(seen)
 
-    # Temporal commits data for time scrubber (Phase 2)
-    commits = build_commits(files_sorted, file_idx, cochange_edges)
+    # Temporal commits data for time scrubber (Phase 2).
+    # Use all co-change edges (no confidence threshold) so the scrubber shows
+    # the full activity history, not just the most-frequent pairs.
+    commits = build_commits(files_sorted, file_idx, temporal_cochange_edges)
 
     data = {
         "repo": repo_name,
@@ -363,9 +375,8 @@ def main():
     args = parser.parse_args()
 
     print(f"Loading data from {args.db}...")
-    files, struct_edges, cochange_edges, owner_of = load_entities_and_edges(
-        args.db, args.cochange_threshold
-    )
+    files, struct_edges, cochange_edges, temporal_cochange_edges, owner_of = \
+        load_entities_and_edges(args.db, args.cochange_threshold)
     print(f"  {len(files)} files, {len(struct_edges)} import edges, "
           f"{len(cochange_edges)} co-change edges (>={args.cochange_threshold})")
 
@@ -374,8 +385,8 @@ def main():
 
     print("Building data...")
     data = build_data(
-        files, struct_edges, cochange_edges, owner_of,
-        args.repo_name, args.max_nodes,
+        files, struct_edges, cochange_edges, temporal_cochange_edges,
+        owner_of, args.repo_name, args.max_nodes,
     )
 
     print(f"Writing {args.out}...")
