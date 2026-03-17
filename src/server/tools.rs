@@ -1,6 +1,7 @@
 use anyhow::Result;
 use serde_json::Value;
 
+use crate::prediction;
 use crate::query;
 use crate::store::graph::GraphStore;
 
@@ -88,6 +89,25 @@ pub fn tool_definitions() -> Vec<ToolDef> {
                     }
                 },
                 "required": []
+            }),
+        },
+        ToolDef {
+            name: "cartograph_predict_risk",
+            description: "Predict regression risk for files based on a set of changed files. Uses structural coupling, co-change frequency, hotspot centrality, and ownership fragmentation signals.",
+            input_schema: serde_json::json!({
+                "type": "object",
+                "properties": {
+                    "changed_files": {
+                        "type": "array",
+                        "items": { "type": "string" },
+                        "description": "List of changed file paths to analyze"
+                    },
+                    "limit": {
+                        "type": "integer",
+                        "description": "Maximum number of results (default: 20, max: 200)"
+                    }
+                },
+                "required": ["changed_files"]
             }),
         },
     ]
@@ -217,6 +237,27 @@ pub fn execute_tool(store: &GraphStore, name: &str, params: &Value) -> Result<St
                 out.push_str(&format!("{:<40} {}\n", path, r.edge_count));
             }
             Ok(out)
+        }
+
+        "cartograph_predict_risk" => {
+            let changed_files: Vec<String> = params["changed_files"]
+                .as_array()
+                .ok_or_else(|| anyhow::anyhow!("missing required param: changed_files"))?
+                .iter()
+                .filter_map(|v| v.as_str().map(|s| s.to_string()))
+                .collect();
+
+            let limit = (params["limit"].as_u64().unwrap_or(20) as usize).min(MAX_LIMIT);
+
+            let config = prediction::PredictionConfig {
+                max_results: limit,
+                ..prediction::PredictionConfig::default()
+            };
+
+            match prediction::scoring::predict_regressions(store, &changed_files, &config) {
+                Ok(predictions) => Ok(prediction::scoring::format_predictions(&predictions)),
+                Err(e) => Err(anyhow::anyhow!("{}", e)),
+            }
         }
 
         other => Err(anyhow::anyhow!("Unknown tool: {other}")),

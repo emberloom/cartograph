@@ -1,4 +1,4 @@
-use cartograph::{historian, parser, query, server, store};
+use cartograph::{historian, parser, prediction, query, server, store};
 use clap::{Parser, Subcommand};
 
 #[derive(Parser)]
@@ -45,6 +45,19 @@ enum Commands {
         /// Number of results
         #[arg(short, long, default_value = "20")]
         limit: usize,
+    },
+    /// Predict regression risk for changed files
+    Predict {
+        /// Comma-separated list of changed file paths
+        #[arg(short, long, value_delimiter = ',')]
+        changed: Vec<String>,
+        /// Maximum number of results
+        #[arg(short, long, default_value = "20")]
+        limit: usize,
+        /// Signal weights as comma-separated values: structural,cochange,hotspot,ownership
+        /// Default: 0.35,0.30,0.25,0.10
+        #[arg(short, long)]
+        weights: Option<String>,
     },
     /// Start MCP server (stdio transport for agent consumption)
     Serve {
@@ -189,6 +202,46 @@ fn main() -> anyhow::Result<()> {
                 for r in &results {
                     let path = r.entity_path.as_deref().unwrap_or(&r.entity_name);
                     println!("{:<40} {}", path, r.edge_count);
+                }
+            }
+        }
+        Commands::Predict {
+            changed,
+            limit,
+            weights,
+        } => {
+            let store = store::graph::GraphStore::new(conn)?;
+            let mut config = prediction::PredictionConfig {
+                max_results: limit,
+                ..prediction::PredictionConfig::default()
+            };
+
+            if let Some(w_str) = weights {
+                let parts: Vec<f64> = w_str
+                    .split(',')
+                    .map(|s| s.trim().parse::<f64>().unwrap_or(0.0))
+                    .collect();
+                if parts.len() == 4 {
+                    config.weights = prediction::SignalWeights {
+                        structural: parts[0],
+                        cochange: parts[1],
+                        hotspot: parts[2],
+                        ownership: parts[3],
+                    };
+                } else {
+                    anyhow::bail!(
+                        "weights must have exactly 4 comma-separated values: structural,cochange,hotspot,ownership"
+                    );
+                }
+            }
+
+            match prediction::scoring::predict_regressions(&store, &changed, &config) {
+                Ok(predictions) => {
+                    print!("{}", prediction::scoring::format_predictions(&predictions));
+                }
+                Err(e) => {
+                    eprintln!("Error: {e}");
+                    std::process::exit(1);
                 }
             }
         }
