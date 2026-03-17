@@ -1,4 +1,6 @@
-use cartograph::{historian, parser, query, server, store};
+use cartograph::{
+    coverage, historian, integrations, parser, policy, prediction, query, server, store,
+};
 use clap::{Parser, Subcommand};
 
 #[derive(Parser)]
@@ -52,6 +54,85 @@ enum Commands {
         #[arg(long, default_value = "true")]
         stdio: bool,
     },
+
+    // ── New commands ────────────────────────────────────────────────────
+    /// Predict regression risk from a set of changed files
+    Predict {
+        /// Comma-separated list of changed file paths
+        #[arg(long)]
+        changed: String,
+        /// Max results to show
+        #[arg(short, long, default_value = "20")]
+        limit: usize,
+    },
+
+    /// Analyze a PR (list of changed files) and produce a report
+    PrAnalysis {
+        /// Comma-separated list of changed file paths
+        #[arg(long)]
+        changed: String,
+    },
+
+    /// Generate a CI report for changed files
+    CiReport {
+        /// Comma-separated list of changed file paths
+        #[arg(long)]
+        changed: String,
+        /// Output format: sarif, github-actions, json
+        #[arg(short, long, default_value = "json")]
+        format: String,
+        /// Fail threshold: none, low, medium, high, critical
+        #[arg(long, default_value = "none")]
+        fail_on: String,
+    },
+
+    /// Import and query test coverage data
+    Coverage {
+        #[command(subcommand)]
+        subcmd: CoverageCommands,
+    },
+
+    /// Check architectural policies against the graph
+    Policy {
+        #[command(subcommand)]
+        subcmd: PolicyCommands,
+    },
+}
+
+#[derive(Subcommand)]
+enum CoverageCommands {
+    /// Import coverage data from a file
+    Import {
+        /// Path to the coverage file
+        #[arg(long)]
+        file: String,
+        /// Format: lcov, json (auto-detected if not specified)
+        #[arg(long)]
+        format: Option<String>,
+    },
+    /// Show coverage report
+    Report,
+    /// Show coverage gaps (hotspots with low coverage)
+    Gaps {
+        /// Minimum connections for a file to be considered
+        #[arg(long, default_value = "3")]
+        min_connections: usize,
+        /// Max results
+        #[arg(short, long, default_value = "20")]
+        limit: usize,
+    },
+}
+
+#[derive(Subcommand)]
+enum PolicyCommands {
+    /// Check policies from a YAML config file
+    Check {
+        /// Path to the policy YAML file
+        #[arg(long)]
+        config: String,
+    },
+    /// Generate a starter policy config
+    Init,
 }
 
 fn main() -> anyhow::Result<()> {
@@ -196,6 +277,124 @@ fn main() -> anyhow::Result<()> {
             let store = store::graph::GraphStore::new(conn)?;
             server::run_mcp_server(store)?;
         }
+
+        // ── New commands ────────────────────────────────────────────────
+        Commands::Predict { changed, limit } => {
+            let store = store::graph::GraphStore::new(conn)?;
+            let changed_files: Vec<String> =
+                changed.split(',').map(|s| s.trim().to_string()).collect();
+            let config = prediction::PredictionConfig {
+                max_results: limit,
+                ..prediction::PredictionConfig::default()
+            };
+            let predictions =
+                prediction::scoring::predict_regressions(&store, &changed_files, &config);
+            print!("{}", prediction::scoring::format_predictions(&predictions));
+        }
+
+        Commands::PrAnalysis { changed } => {
+            let store = store::graph::GraphStore::new(conn)?;
+            let changed_files: Vec<String> =
+                changed.split(',').map(|s| s.trim().to_string()).collect();
+            let config = integrations::github::PrAnalysisConfig::default();
+            let report =
+                integrations::github::analysis::analyze_pr(&store, &changed_files, &config);
+            print!(
+                "{}",
+                integrations::github::analysis::format_report_markdown(&report)
+            );
+        }
+
+        Commands::CiReport {
+            changed,
+            format,
+            fail_on,
+        } => {
+            let store = store::graph::GraphStore::new(conn)?;
+            let changed_files: Vec<String> =
+                changed.split(',').map(|s| s.trim().to_string()).collect();
+            let threshold: integrations::cicd::FailThreshold = fail_on.parse()?;
+            let report =
+                integrations::cicd::reporter::generate_report(&store, &changed_files, threshold);
+
+            let output_format: integrations::cicd::OutputFormat = format.parse()?;
+            match output_format {
+                integrations::cicd::OutputFormat::Sarif => {
+                    let sarif = integrations::cicd::sarif::to_sarif(&report);
+                    println!("{}", serde_json::to_string_pretty(&sarif)?);
+                }
+                integrations::cicd::OutputFormat::GithubActions => {
+                    print!(
+                        "{}",
+                        integrations::cicd::github_actions::format_annotations(&report)
+                    );
+                }
+                integrations::cicd::OutputFormat::Json => {
+                    println!("{}", serde_json::to_string_pretty(&report)?);
+                }
+            }
+
+            std::process::exit(report.exit_code);
+        }
+
+        Commands::Coverage { subcmd } => match subcmd {
+            CoverageCommands::Import { file, format } => {
+                let content = std::fs::read_to_string(&file)?;
+                let fmt = match format.as_deref() {
+                    Some("lcov") => "lcov",
+                    Some("json") => "json",
+                    Some(other) => anyhow::bail!("Unknown coverage format: {}", other),
+                    None => coverage::parser::detect_format(&content)?,
+                };
+
+                let files = match fmt {
+                    "lcov" => coverage::parser::parse_lcov(&content)?,
+                    "json" => coverage::parser::parse_json(&content)?,
+                    _ => unreachable!(),
+                };
+
+                coverage::store::init_coverage_table(&conn)?;
+                let count = coverage::store::write_coverage(&conn, &files)?;
+                println!("Imported coverage for {} files.", count);
+            }
+            CoverageCommands::Report => {
+                coverage::store::init_coverage_table(&conn)?;
+                let report = coverage::store::read_all_coverage(&conn)?;
+                print!("{}", coverage::overlay::format_coverage_report(&report));
+            }
+            CoverageCommands::Gaps {
+                min_connections,
+                limit,
+            } => {
+                let store = store::graph::GraphStore::new(conn)?;
+                let cov_conn = rusqlite::Connection::open(&cli.db)?;
+                coverage::store::init_coverage_table(&cov_conn)?;
+                let gaps = coverage::overlay::find_coverage_gaps(
+                    &store,
+                    &cov_conn,
+                    min_connections,
+                    limit,
+                )?;
+                print!("{}", coverage::overlay::format_coverage_gaps(&gaps));
+            }
+        },
+
+        Commands::Policy { subcmd } => match subcmd {
+            PolicyCommands::Check { config } => {
+                let store = store::graph::GraphStore::new(conn)?;
+                let yaml = std::fs::read_to_string(&config)?;
+                let policy_config = policy::rules::parse_policy_config(&yaml)?;
+                let result = policy::engine::evaluate(&store, &policy_config);
+                print!("{}", policy::report::format_report(&result));
+
+                if result.has_errors {
+                    std::process::exit(1);
+                }
+            }
+            PolicyCommands::Init => {
+                print!("{}", policy::rules::generate_starter_config());
+            }
+        },
     }
 
     Ok(())

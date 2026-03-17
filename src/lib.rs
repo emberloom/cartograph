@@ -1,5 +1,9 @@
+pub mod coverage;
 pub mod historian;
+pub mod integrations;
 pub mod parser;
+pub mod policy;
+pub mod prediction;
 pub mod query;
 pub mod server;
 pub mod store;

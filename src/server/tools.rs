@@ -1,6 +1,8 @@
 use anyhow::Result;
 use serde_json::Value;
 
+use crate::integrations;
+use crate::prediction;
 use crate::query;
 use crate::store::graph::GraphStore;
 
@@ -88,6 +90,53 @@ pub fn tool_definitions() -> Vec<ToolDef> {
                     }
                 },
                 "required": []
+            }),
+        },
+        // ── New tools ──────────────────────────────────────────────────
+        ToolDef {
+            name: "cartograph_predict_risk",
+            description: "Predict regression risk for files based on a set of changed files. Returns ranked risk scores with signal breakdown.",
+            input_schema: serde_json::json!({
+                "type": "object",
+                "properties": {
+                    "changed_files": {
+                        "type": "string",
+                        "description": "Comma-separated list of changed file paths"
+                    },
+                    "limit": {
+                        "type": "integer",
+                        "description": "Max number of results (default: 20)"
+                    }
+                },
+                "required": ["changed_files"]
+            }),
+        },
+        ToolDef {
+            name: "cartograph_pr_analysis",
+            description: "Analyze a PR (set of changed files) for blast radius, co-change warnings, and reviewer suggestions. Returns a structured Markdown report.",
+            input_schema: serde_json::json!({
+                "type": "object",
+                "properties": {
+                    "changed_files": {
+                        "type": "string",
+                        "description": "Comma-separated list of changed file paths"
+                    }
+                },
+                "required": ["changed_files"]
+            }),
+        },
+        ToolDef {
+            name: "cartograph_policy_check",
+            description: "Evaluate architectural policies against the codebase graph. Requires a YAML policy config.",
+            input_schema: serde_json::json!({
+                "type": "object",
+                "properties": {
+                    "config_yaml": {
+                        "type": "string",
+                        "description": "YAML policy configuration content"
+                    }
+                },
+                "required": ["config_yaml"]
             }),
         },
     ]
@@ -217,6 +266,51 @@ pub fn execute_tool(store: &GraphStore, name: &str, params: &Value) -> Result<St
                 out.push_str(&format!("{:<40} {}\n", path, r.edge_count));
             }
             Ok(out)
+        }
+
+        // ── New tools ──────────────────────────────────────────────────
+        "cartograph_predict_risk" => {
+            let changed_str = params["changed_files"]
+                .as_str()
+                .ok_or_else(|| anyhow::anyhow!("missing required param: changed_files"))?;
+            let changed_files: Vec<String> = changed_str
+                .split(',')
+                .map(|s| s.trim().to_string())
+                .collect();
+            let limit = (params["limit"].as_u64().unwrap_or(20) as usize).min(MAX_LIMIT);
+
+            let config = prediction::PredictionConfig {
+                max_results: limit,
+                ..prediction::PredictionConfig::default()
+            };
+            let predictions =
+                prediction::scoring::predict_regressions(store, &changed_files, &config);
+            Ok(prediction::scoring::format_predictions(&predictions))
+        }
+
+        "cartograph_pr_analysis" => {
+            let changed_str = params["changed_files"]
+                .as_str()
+                .ok_or_else(|| anyhow::anyhow!("missing required param: changed_files"))?;
+            let changed_files: Vec<String> = changed_str
+                .split(',')
+                .map(|s| s.trim().to_string())
+                .collect();
+
+            let config = integrations::github::PrAnalysisConfig::default();
+            let report = integrations::github::analysis::analyze_pr(store, &changed_files, &config);
+            Ok(integrations::github::analysis::format_report_markdown(
+                &report,
+            ))
+        }
+
+        "cartograph_policy_check" => {
+            let config_yaml = params["config_yaml"]
+                .as_str()
+                .ok_or_else(|| anyhow::anyhow!("missing required param: config_yaml"))?;
+            let policy_config = crate::policy::rules::parse_policy_config(config_yaml)?;
+            let result = crate::policy::engine::evaluate(store, &policy_config);
+            Ok(crate::policy::report::format_report(&result))
         }
 
         other => Err(anyhow::anyhow!("Unknown tool: {other}")),
