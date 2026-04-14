@@ -46,6 +46,7 @@ pub fn mine_commits(repo_path: &Path, limit: Option<usize>) -> Result<Vec<Commit
         .args([
             "log",
             "--name-status",
+            "--no-merges",
             "--format=COMMIT_START%n%H%n%an%n%ae%n%at%n%s",
             &format!("-{}", effective_limit),
             "--",
