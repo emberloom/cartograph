@@ -8,6 +8,13 @@ dist/
 .env
 .env.*
 
+# Superpowers working docs (specs, plans, research)
+docs/superpowers/
+
+# Node
+node_modules/
+viz/dist/
+
 # macOS
 .DS_Store
 
@@ -15,3 +22,5 @@ dist/
 .idea/
 .vscode/
 *.iml
+viz/node_modules/
+viz/public/data.json

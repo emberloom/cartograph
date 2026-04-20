@@ -1,0 +1,67 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Cartograph</title>
+  <style>
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body {
+      background: #0d1117;
+      color: #e6edf3;
+      font-family: 'SF Mono', 'Fira Code', monospace;
+      overflow: hidden;
+    }
+    #canvas-container {
+      position: fixed;
+      inset: 0;
+    }
+    #error-overlay {
+      display: none;
+      position: fixed;
+      inset: 0;
+      z-index: 100;
+      background: #0d1117;
+      justify-content: center;
+      align-items: center;
+      flex-direction: column;
+      gap: 16px;
+      font-size: 14px;
+      color: #ff6b6b;
+    }
+    #error-overlay.visible {
+      display: flex;
+    }
+    #loading-overlay {
+      position: fixed;
+      inset: 0;
+      z-index: 50;
+      background: #0d1117;
+      display: flex;
+      justify-content: center;
+      align-items: center;
+      flex-direction: column;
+      gap: 16px;
+      transition: opacity 0.4s;
+    }
+    #loading-overlay.fade-out {
+      opacity: 0;
+      pointer-events: none;
+    }
+    #loading-overlay h1 { font-size: 24px; color: #58a6ff; }
+    #loading-overlay .sub { color: #8b949e; font-size: 12px; }
+  </style>
+</head>
+<body>
+  <div id="loading-overlay">
+    <h1>Cartograph</h1>
+    <div class="sub" id="load-status">Loading data...</div>
+  </div>
+  <div id="error-overlay">
+    <div>Failed to load visualization data.</div>
+    <div id="error-detail" style="color:#8b949e;font-size:12px;"></div>
+  </div>
+  <div id="canvas-container"></div>
+  <script type="module" src="/src/main.js"></script>
+</body>
+</html>

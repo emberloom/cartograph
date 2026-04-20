@@ -169,6 +169,45 @@ impl GraphStore {
         Ok(())
     }
 
+    /// Write a co-change edge with the actual git commit timestamp (not indexing time).
+    /// Use this instead of add_edge for co-change data so the time scrubber shows real history.
+    pub fn add_cochange_edge(
+        &mut self,
+        from_id: &str,
+        to_id: &str,
+        confidence: f64,
+        last_commit_ts: i64,
+    ) -> Result<()> {
+        use chrono::TimeZone as _;
+        let ts_str = chrono::Utc
+            .timestamp_opt(last_commit_ts, 0)
+            .single()
+            .map(|dt| dt.to_rfc3339())
+            .unwrap_or_else(|| chrono::Utc::now().to_rfc3339());
+
+        let kind = EdgeKind::CoChangesWith;
+        self.conn.execute(
+            "INSERT OR REPLACE INTO edges (from_id, to_id, kind, confidence, last_evidence, evidence_count, decay_half_life, evidence)
+             VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8)",
+            rusqlite::params![from_id, to_id, kind.to_string(), confidence, ts_str, 1_i64, 180.0_f64, "[]"],
+        )?;
+
+        let from_node = self
+            .node_map
+            .get(from_id)
+            .copied()
+            .ok_or_else(|| anyhow::anyhow!("Entity not found: {}", from_id))?;
+        let to_node = self
+            .node_map
+            .get(to_id)
+            .copied()
+            .ok_or_else(|| anyhow::anyhow!("Entity not found: {}", to_id))?;
+
+        self.graph.add_edge(from_node, to_node, kind);
+
+        Ok(())
+    }
+
     /// Return structural dependencies only (imports, calls, inherits, etc.)
     pub fn dependencies(&self, entity_id: &str, direction: petgraph::Direction) -> Vec<Entity> {
         let Some(&node) = self.node_map.get(entity_id) else {

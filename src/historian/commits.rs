@@ -6,6 +6,7 @@ pub enum ChangeKind {
     Added,
     Modified,
     Deleted,
+    Renamed { old_path: String },
 }
 
 #[derive(Debug, Clone)]
@@ -38,8 +39,9 @@ pub fn mine_commits(repo_path: &Path, limit: Option<usize>) -> Result<Vec<Commit
     // 1. Get commit list with metadata via --format
     // 2. Get file changes via --name-status in the same run using a record separator
 
-    // Cap commit limit to prevent memory exhaustion on large repos
-    const MAX_COMMITS: usize = 10_000;
+    // Cap commit limit to prevent memory exhaustion on very large repos.
+    // The caller (main.rs index command) controls this via --max-commits.
+    const MAX_COMMITS: usize = 100_000;
     let effective_limit = limit.map(|n| n.min(MAX_COMMITS)).unwrap_or(MAX_COMMITS);
 
     let output = Command::new("git")
@@ -115,27 +117,38 @@ fn parse_git_log_output(text: &str) -> Result<Vec<CommitInfo>> {
                 continue;
             }
             let status = parts[0];
+
+            // Renames: R<score>\told_path\tnew_path — capture old_path for rename tracking
+            if status.starts_with('R') && parts.len() >= 3 {
+                let old_path = parts[1].to_string();
+                let new_path = parts[2].to_string();
+                commit.files_changed.push(FileChange {
+                    path: new_path,
+                    kind: ChangeKind::Renamed { old_path },
+                });
+                continue;
+            }
+
+            // Copies: treat destination as Added (source is still present, no rename chain)
+            if status.starts_with('C') && parts.len() >= 3 {
+                commit.files_changed.push(FileChange {
+                    path: parts[2].to_string(),
+                    kind: ChangeKind::Added,
+                });
+                continue;
+            }
+
             let kind = if status.starts_with('A') {
                 ChangeKind::Added
             } else if status.starts_with('D') {
                 ChangeKind::Deleted
-            } else if status.starts_with('R') || status.starts_with('C') {
-                // Rename/copy: treat the new path as Modified
-                ChangeKind::Modified
             } else {
                 ChangeKind::Modified
             };
 
-            // For rename/copy, parts[2] is the new path; otherwise parts[1]
-            let path = if (status.starts_with('R') || status.starts_with('C')) && parts.len() >= 3 {
-                parts[2].to_string()
-            } else if parts.len() >= 2 {
-                parts[1].to_string()
-            } else {
-                continue;
-            };
-
-            commit.files_changed.push(FileChange { path, kind });
+            if parts.len() >= 2 {
+                commit.files_changed.push(FileChange { path: parts[1].to_string(), kind });
+            }
         }
     }
 
@@ -236,5 +249,30 @@ D\told_file.txt
         assert_eq!(commits[1].files_changed.len(), 2);
         assert_eq!(commits[1].files_changed[0].kind, ChangeKind::Modified);
         assert_eq!(commits[1].files_changed[1].kind, ChangeKind::Deleted);
+    }
+
+    #[test]
+    fn test_parse_rename_lines() {
+        let sample = "\
+COMMIT_START
+aaa
+Alice
+alice@example.com
+1700000000
+Rename and modify
+R90\tsrc/old.ts\tsrc/new.ts
+M\tsrc/other.ts
+";
+        let commits = parse_git_log_output(sample).unwrap();
+        assert_eq!(commits.len(), 1);
+        assert_eq!(commits[0].files_changed.len(), 2);
+
+        let rename = &commits[0].files_changed[0];
+        assert_eq!(rename.path, "src/new.ts");
+        assert_eq!(rename.kind, ChangeKind::Renamed { old_path: "src/old.ts".to_string() });
+
+        let modified = &commits[0].files_changed[1];
+        assert_eq!(modified.path, "src/other.ts");
+        assert_eq!(modified.kind, ChangeKind::Modified);
     }
 }
